@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Checkout — HICHEN Asian Market</title>
+  <link rel="canonical" href="https://www.uslatiao.com/checkout.html">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="HICHEN Asian Market">
+  <meta property="og:image" content="https://www.uslatiao.com/assets/img/og-cover.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="HICHEN Asian Market - The Spicy Food Lover's Paradise.">
+  <meta name="twitter:image" content="https://www.uslatiao.com/assets/img/og-cover.jpg">
+  <meta property="og:title" content="Checkout — HICHEN Asian Market">
+  <meta property="og:description" content="Checkout securely at HICHEN Asian Market. Orders ship from our US warehouse in 1 business day.">
+  <meta property="og:url" content="https://www.uslatiao.com/checkout.html">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Checkout — HICHEN Asian Market">
+  <meta name="twitter:description" content="Checkout securely at HICHEN Asian Market. Orders ship from our US warehouse in 1 business day.">
+  <meta name="description" content="Checkout securely at HICHEN Asian Market. Orders ship from our US warehouse in 1 business day.">
+  <link rel="stylesheet" href="assets/css/styles.css?v=42">
+  <script src="https://cdn.jsdelivr.net/npm/@tencent-ai/workbuddy-cloud-sdk@dev/lib/index.global.js"></script>
+</head>
+<body>
+  <div id="site-header"></div>
+
+  <div class="container page-head" id="page-head">
+    <h1>Checkout</h1>
+    <p class="muted">Ships from the US. Orders placed before 2pm ET go out the same business day.</p>
+  </div>
+
+  <section class="section container" style="padding-top:10px">
+    <div id="checkout" style="display:none">
+      <div class="note blue" id="preview-note" style="display:none">🔧 <strong>Payment is coming soon.</strong> This store is in preview. Placing an order saves it as <em>pending</em> — no charge is made.</div>
+      <div class="note" id="direct-note" style="display:none;background:#eef6ff;border-color:#cfe4ff"></div>
+      <div id="ck-grid" style="display:grid;grid-template-columns:1fr 340px;gap:30px;align-items:start;margin-top:18px">
+        <div>
+          <h3 style="margin:0 0 12px">Contact</h3>
+          <div class="field"><label>Email</label><input id="ck-email" type="email" autocomplete="email" placeholder="you@example.com" required><div class="muted" style="font-size:12px;margin-top:4px">For your receipt and delivery updates. No account needed to order.</div></div>
+          <div class="field"><label>Phone number <span class="muted" style="font-weight:400">(the carrier may text delivery updates)</span></label><input id="ck-phone" type="tel" autocomplete="tel" placeholder="(555) 123-4567"></div>
+
+          <h3 style="margin:18px 0 12px">Shipping address</h3>
+          <div class="field"><label>Full name</label><input id="ck-name" type="text" autocomplete="name" placeholder="Your name"></div>
+          <div class="field"><label>Street address</label><input id="ck-addr" type="text" autocomplete="address-line1" placeholder="123 Main St"></div>
+          <div class="field"><label>Apt, suite, unit <span class="muted" style="font-weight:400">(optional)</span></label><input id="ck-addr2" type="text" autocomplete="address-line2" placeholder="Apt 4B"></div>
+          <div style="display:grid;grid-template-columns:1fr 110px;gap:12px">
+            <div class="field"><label>City</label><input id="ck-city" type="text" autocomplete="address-level2" placeholder="Austin"></div>
+            <div class="field"><label>State</label><select id="ck-state"><option value="">—</option></select></div>
+          </div>
+          <div class="field" style="max-width:180px"><label>ZIP code</label><input id="ck-zip" type="text" inputmode="numeric" autocomplete="postal-code" placeholder="78701" maxlength="10"></div>
+          <div class="muted" id="ck-addr-note" style="font-size:12px;min-height:14px;color:#d9442b"></div>
+        </div>
+        <div class="summary" id="ck-summary"></div>
+      </div>
+    </div>
+
+    <div id="done" style="display:none" class="form">
+      <div class="note green" id="done-note">✅ Order placed. We'll email you a confirmation.</div>
+      <p class="muted" id="done-id"></p>
+      <div id="done-detail" class="muted" style="font-size:14px"></div>
+      <div style="margin-top:16px">
+        <a class="btn red" href="account.html">View my orders</a>
+        <a class="btn ghost" href="shop.html">Keep shopping</a>
+      </div>
+    </div>
+
+    <div id="canceled" style="display:none" class="form">
+      <div class="note">Payment was canceled — you haven't been charged.</div>
+      <p class="muted" id="canceled-id"></p>
+      <a class="btn red" href="checkout.html">Back to checkout</a>
+      <a class="btn ghost" href="shop.html">Keep shopping</a>
+    </div>
+  </section>
+
+  <div id="site-footer"></div>
+
+  <script src="assets/js/config.js?v=15"></script>
+  <script src="assets/js/cloud.js?v=9"></script>
+  <script src="assets/js/store.js?v=8"></script>
+  <script src="assets/js/data.js?v=32"></script>
+  <script src="assets/js/signup.js?v=3"></script><script src="assets/js/layout.js?v=14"></script>
+  <script src="assets/js/app.js?v=7"></script>
+<script src="assets/js/analytics.js?v=1"></script>
+  <script src="assets/js/shop.js?v=21"></script>
+  <script>
+    (async function () {
+      const session = await window.Cloud.getSession();
+      const checkout = document.getElementById('checkout');
+      const done = document.getElementById('done');
+      const canceled = document.getElementById('canceled');
+      const pageHead = document.getElementById('page-head');
+      const params = new URLSearchParams(location.search);
+
+      // ============ A. 支付回跳：先处理 Stripe 返回，再管结账 ============
+      const sessionId = params.get('session_id');
+      if (sessionId) {
+        pageHead.style.display = 'none';
+        document.getElementById('canceled').style.display = 'none';
+        // 防重复处理（刷新页面不重复标记）
+        const seenKey = 'aa_paid_' + sessionId;
+        let alreadySeen = false;
+        try { alreadySeen = !!sessionStorage.getItem(seenKey); } catch (e) {}
+
+        let st = null;
+        try {
+          const r = await fetch('/api/stripe/session?id=' + encodeURIComponent(sessionId), { cache: 'no-store' });
+          st = await r.json();
+        } catch (e) { st = null; }
+
+        done.style.display = 'block';
+        const noteEl = document.getElementById('done-note');
+        const idEl = document.getElementById('done-id');
+        const detailEl = document.getElementById('done-detail');
+
+        if (st && st.ok && st.paid) {
+          noteEl.className = 'note green';
+          noteEl.textContent = '✅ Payment received. Thank you!';
+          idEl.textContent = st.order_id ? 'Order reference: ' + String(st.order_id).slice(0, 8) : '';
+          detailEl.textContent = `Charged ${window.Money(st.amount_total)}${st.email ? ' · receipt sent to ' + st.email : ''}. We ship from the US within 1 business day.`;
+
+          // 把订单标成已付（前端兜底；webhook 配了 service key 时也会写一次，幂等）
+          if (!alreadySeen && st.order_id) {
+            try {
+              const patch = {
+                status: 'paid',
+                payment_status: 'paid',
+                payment_provider: 'stripe',
+                payment_ref: sessionId,
+                paid_at: new Date().toISOString()
+              };
+              // 补全缺失的收货信息（Stripe 收银台里填的电话/地址）——只补空缺，不覆盖已有值
+              try {
+                const cur = ((await window.Data.getMyOrders(session)) || []).find(o => o.id === st.order_id);
+                ['phone','ship_name','ship_addr','ship_city','ship_state','ship_zip'].forEach(k => {
+                  if (st[k] && !(cur && cur[k])) patch[k] = st[k];
+                });
+              } catch (e) {}
+              await window.Data.updateOrder(st.order_id, patch);
+            } catch (e) {}
+            try { sessionStorage.setItem(seenKey, '1'); } catch (e) {}
+          }
+          // 单品直结的订单不清购物车（购物车没参与这笔单）
+          let directOrder = '';
+          try { directOrder = sessionStorage.getItem('aa_direct_order') || ''; } catch (e) {}
+          if (directOrder && st && st.order_id && directOrder === String(st.order_id)) {
+            try { sessionStorage.removeItem('aa_direct_order'); } catch (e) {}
+          } else {
+            window.Store.clear();
+          }
+          // 下单成功后邀请注册（转化最高的注册时机）
+          mountJoinCard(st.email || '');
+        } else if (st && st.ok && !st.paid) {
+          noteEl.className = 'note';
+          noteEl.textContent = '⏳ Payment is still processing.';
+          idEl.textContent = st.order_id ? 'Order reference: ' + String(st.order_id).slice(0, 8) : '';
+          detailEl.textContent = 'Some payment methods take a few minutes to clear. We\'ll email you as soon as it settles.';
+        } else {
+          noteEl.className = 'note';
+          noteEl.textContent = 'We couldn\'t verify this payment automatically.';
+          idEl.textContent = 'Reference: ' + sessionId.slice(0, 20);
+          detailEl.textContent = 'If you were charged, your order is safe — we reconcile every payment manually. Reply to your receipt email if you have any question.';
+        }
+        return;
+      }
+
+      // 用户主动取消支付
+      if (params.get('canceled')) {
+        pageHead.style.display = 'none';
+        canceled.style.display = 'block';
+        return;
+      }
+
+      // ============ B. 正常结账 ============
+      // 美国 DTC 通行做法：结账不强制注册（强制注册是流失首因）。
+      // 游客直接填邮箱下单；注册入口放在「下单成功后」邀请。
+      checkout.style.display = 'block';
+      document.getElementById('ck-email').value = window.Cloud.userEmail(session)
+        || (function () { try { return sessionStorage.getItem('aa_email') || ''; } catch (e) { return ''; } })();
+
+      const products = window.Shop.sellable(await window.Data.getProducts());
+      const bySlug = Object.fromEntries(products.map(p => [p.slug, p]));
+      const cart = window.Store.get();
+
+      // —— Buy Now 单品直结：详情页点了「Buy Now」会带一件商品过来，只结算它，不并购物车 ——
+      let direct = null;
+      try {
+        const raw = sessionStorage.getItem('uslatiao_buynow');
+        if (raw) {
+          sessionStorage.removeItem('uslatiao_buynow'); // 一次性消费，刷新/后退不重复触发
+          const d = JSON.parse(raw);
+          if (d && d.slug && bySlug[d.slug] && +d.qty > 0) direct = d;
+          else window.Layout.toast('That item is no longer available — showing your cart instead');
+        }
+      } catch (e) {}
+      const source = direct ? [{ slug: direct.slug, qty: direct.qty, variant: direct.variant || null }] : cart;
+
+      const lines = source.filter(it => bySlug[it.slug]).map(it => {
+        const p = bySlug[it.slug];
+        const v = it.variant;
+        const price = (v && v.price != null) ? v.price : p.price;
+        const weight = (v && v.weight_oz != null) ? parseFloat(v.weight_oz) : (parseFloat(p.weight_oz) || 0);
+        return {
+          slug: p.slug, name: p.name, price: price, qty: it.qty, category: p.category,
+          weight_oz: weight,
+          variant_sku: v && v.sku ? v.sku : null,
+          variant_label: v && v.option_label ? v.option_label : null
+        };
+      });
+      if (direct && lines.length) {
+        const dn = document.getElementById('direct-note');
+        const p = bySlug[direct.slug];
+        const vLabel = (direct.variant && direct.variant.option_label) ? ' (' + direct.variant.option_label + ')' : '';
+        dn.innerHTML = '🛒 <strong>Checking out this item only: ' + (p.name || direct.slug) + vLabel + ' × ' + direct.qty + '</strong>'
+          + '<br><span style="font-size:13px">Your cart was left untouched. Want to check out your whole cart instead? <a href="cart.html">Go to cart</a>.</span>';
+        dn.style.display = 'block';
+      }
+      if (!lines.length) { window.Layout.toast(direct ? 'That item could not be checked out' : 'Your cart is empty'); }
+
+      // 全美 50 州 + DC + 离岛（用于判断物流区域与销售税）
+      const US_STATES = ['AL','AK','AZ','AR','CA','CO','CT','DE','DC','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY','PR'];
+      const stateEl = document.getElementById('ck-state');
+      stateEl.innerHTML = '<option value="">—</option>' +
+        US_STATES.map(s => `<option value="${s}">${s}</option>`).join('');
+      stateEl.onchange = () => renderSummary();
+
+      // 物流设置（后台「物流设置」页签配置；读不到时用内置默认）
+      let shipSettings = null;
+      try { shipSettings = await window.Data.getShippingSettings(); } catch (e) { shipSettings = null; }
+
+      // 折扣：拉取折扣（顾客视角仅 active），应用后重算
+      const discounts = await window.Data.getDiscounts();
+      let applied = null;       // 校验通过的折扣对象（含 amount）
+      let discountAmount = 0;   // 金额减免
+      let freeShip = false;     // 免邮
+
+      // 顾客历史订单：判断是否新客、该折扣码本人已用次数
+      let myOrders = [];
+      try { myOrders = (await window.Data.getMyOrders(session)) || []; } catch (e) { myOrders = []; }
+      const priorOrders = myOrders.filter(o => o.status !== 'cancelled').length;
+      const firstOrder = priorOrders === 0;
+      const usageOf = code => myOrders.filter(o => (o.discount_code || '').toUpperCase() === String(code || '').toUpperCase()).length;
+      const subtotalOf = () => lines.reduce((s, l) => s + l.price * l.qty, 0);
+
+      // 自动折扣：无需输入，自动取最优
+      function autoDiscount(subtotal) {
+        const autos = (discounts || []).filter(d => (d.apply_type || 'code') === 'auto');
+        let best = null, bestAmt = -1;
+        autos.forEach(d => {
+          const r = window.Data.validateDiscount(d.code, subtotal, discounts, { items: lines, firstOrder, codeUsage: usageOf(d.code) });
+          if (!r.ok) return;
+          const amt = d.type === 'free_shipping' ? 0 : (r.amount || 0);
+          if (amt >= bestAmt) { bestAmt = amt; best = Object.assign({}, d, { amount: r.amount }); }
+        });
+        return best;
+      }
+
+      const TAX_RATES = { TX:0.0625, CA:0.0725, NY:0.08875, FL:0.06, WA:0.065, IL:0.0625, PA:0.06, OH:0.0575, GA:0.04, NC:0.0475 };
+      function compute() {
+        const subtotal = lines.reduce((s, l) => s + l.price * l.qty, 0);
+        discountAmount = 0; freeShip = false;
+        if (applied) {
+          if (applied.type === 'free_shipping') { freeShip = true; }
+          else { discountAmount = applied.amount || 0; }
+        }
+        const discountedSub = Math.max(0, subtotal - discountAmount);
+        // 运费：按后台物流设置计算（统一费率 / 按重量 / 按金额 + 区域附加费）
+        const shipInfo = window.Data.computeShipping({
+          items: lines,
+          subtotal,
+          discountedSubtotal: discountedSub,
+          destState: stateEl ? stateEl.value : '',
+          freeShipping: freeShip
+        }, shipSettings || window.Data.DEFAULT_SHIPPING);
+        const shipping = shipInfo.rate;
+        const rate = (window.APP_CONFIG.TAX_ENABLED && stateEl && stateEl.value && TAX_RATES[stateEl.value]) ? TAX_RATES[stateEl.value] : 0;
+        const tax = +(discountedSub * rate).toFixed(2);
+        const total = +(discountedSub + shipping + tax).toFixed(2);
+        return { subtotal, discountedSub, shipping, tax, total, shipInfo };
+      }
+
+      let liveMode = false;   // 服务端返回可用 Stripe 时为 true
+
+      function renderSummary() {
+        const { subtotal, discountedSub, shipping, tax, total, shipInfo } = compute();
+        const si = shipInfo || {};
+        // 运费说明（英文，面向美区顾客）
+        let shipNote = '';
+        if (si.free && si.reason === 'threshold') shipNote = 'Free shipping applied';
+        else if (si.free && si.reason === 'code') shipNote = 'Free shipping (promo code)';
+        else if (si.free && si.reason === 'empty') shipNote = '';
+        else {
+          const bits = [];
+          if (si.weightOz > 0) bits.push(si.weightOz + ' oz');
+          if (si.zoneLabel) bits.push(si.zoneLabel);
+          if (si.surcharge > 0) bits.push('includes ' + window.Money(si.surcharge) + ' zone fee');
+          shipNote = bits.join(' · ');
+          const thr = shipSettings && parseFloat(shipSettings.free_threshold);
+          const basis = (shipSettings && shipSettings.free_after_discount !== false) ? discountedSub : subtotal;
+          if (thr > 0 && basis < thr) shipNote += ` — spend ${window.Money(thr - basis)} more for free shipping`;
+        }
+        const discLine = applied
+          ? `<div class="row" style="color:#2e8b57"><span>Discount (${applied.code})</span><span>−${window.Money(discountAmount || 0)}${freeShip?' · Free shipping':''}</span></div>`
+          : '';
+        const appliedNote = applied
+          ? `<div class="note green" style="margin-bottom:8px">✓ ${applied.code} applied${freeShip?' — free shipping':''}${(applied.apply_type||'code')==='auto'?' (auto)':''}</div>`
+          : '';
+        const discBox = `${appliedNote}
+          <div class="disc-row">
+               <input id="ck-code" placeholder="Discount code" value="${applied ? String(applied.code).replace(/"/g, '') : ''}">
+               <button class="btn small" id="ck-apply">Apply</button>
+             </div><div class="muted" id="ck-note" style="font-size:12px;min-height:14px"></div>`;
+        document.getElementById('ck-summary').innerHTML = `
+          <h3 style="margin:0 0 12px">Summary</h3>
+          ${lines.map(l => `<div class="row"><span>${l.qty}× ${l.name}${(l.variant_label || l.variant_sku) ? ` <span style="color:#888;font-size:12px">(${l.variant_label || l.variant_sku})</span>` : ''}</span><span>${window.Money(l.price*l.qty)}</span></div>`).join('')}
+          <div class="row"><span>Subtotal</span><span>${window.Money(subtotal)}</span></div>
+          ${discLine}
+          <div class="row"><span>Shipping</span><span>${shipping===0?'Free':window.Money(shipping)}</span></div>
+          ${shipNote ? `<div class="muted" style="font-size:12px;margin:-4px 0 6px">${shipNote}</div>` : ''}
+          ${tax > 0 ? `<div class="row"><span>Sales tax (${stateEl.value})</span><span>${window.Money(tax)}</span></div>` : ''}
+          <div class="row total"><span>Total</span><span>${window.Money(total)}</span></div>
+          ${discBox}
+          <button class="btn red" id="place" style="width:100%;margin-top:14px">${liveMode ? 'Pay ' + window.Money(total) : 'Place order'}</button>
+          <div class="muted" style="font-size:12px;text-align:center;margin-top:8px">${liveMode ? 'Secure checkout by Stripe · Visa · Mastercard · Amex' : 'Preview mode — no charge'}</div>`;
+
+        const applyBtn = document.getElementById('ck-apply');
+        if (applyBtn) applyBtn.onclick = () => {
+          const code = document.getElementById('ck-code').value;
+          const r = window.Data.validateDiscount(code, subtotal, discounts, { items: lines, firstOrder, codeUsage: usageOf(code) });          const note = document.getElementById('ck-note');
+          if (!r.ok) { note.style.color = '#d9442b'; note.textContent = r.message || 'Invalid code'; return; }
+          applied = Object.assign({}, r.discount, { amount: r.amount });
+          note.style.color = '#2e8b57'; note.textContent = 'Applied!'; renderSummary();
+        };
+        document.getElementById('place').onclick = placeOrder;
+      }
+
+      // ============ C. 下单 ============
+      const v = id => (document.getElementById(id).value || '').trim();
+
+      // —— 下单成功后的注册邀请 ——
+      // 美国 DTC 通行做法里，转化最高的注册时机就是「刚付完款」：
+      // 信任已建立、风险感最低，此时只要一个邮箱就能锁定关系。
+      // 这里给的是订阅+账号两步：先收邮箱发码（站点本就是无密码验证码登录）。
+      function mountJoinCard(email) {
+        const doneBox = document.getElementById('done');
+        if (!doneBox) return;
+        if (document.getElementById('sg-join')) return;
+        const card = document.createElement('div');
+        card.className = 'sg-join';
+        card.id = 'sg-join';
+        card.innerHTML =
+          '<h4>Save your order and check out faster next time</h4>' +
+          '<p>Create a free account with the email on this order — no password needed, we send a code. ' +
+          'You\'ll get order tracking, and a 10% code for your next order.</p>' +
+          '<div class="sg-join-row">' +
+          '<input type="email" id="sg-join-email" placeholder="you@example.com" autocomplete="email" aria-label="Email address">' +
+          '<button class="btn red" id="sg-join-btn">Create account</button>' +
+          '</div>' +
+          '<p class="sg-join-msg" id="sg-join-msg" role="status" aria-live="polite"></p>';
+        doneBox.appendChild(card);
+
+        const input = document.getElementById('sg-join-email');
+        const btn = document.getElementById('sg-join-btn');
+        const msg = document.getElementById('sg-join-msg');
+        if (email) input.value = email;
+
+        btn.onclick = async () => {
+          const mail = (input.value || '').trim();
+          if (!mail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) {
+            msg.textContent = 'Please enter a valid email address.';
+            msg.className = 'sg-join-msg err';
+            input.focus();
+            return;
+          }
+          const label = btn.textContent;
+          btn.disabled = true;
+          btn.textContent = 'Sending…';
+          try {
+            // 1) 订阅名单（营销触达）
+            try { await window.Data.subscribe(mail, 'post_purchase', 'order'); } catch (e) {}
+            // 2) 发验证码，顾客输码即建号（复用站点现有 OTP 登录）
+            const { data, error } = await window.Cloud.sendOtp(mail);
+            if (error || !data) {
+              msg.textContent = (error && error.message) || 'Could not send the code. Please try again.';
+              msg.className = 'sg-join-msg err';
+              btn.disabled = false;
+              btn.textContent = label;
+              return;
+            }
+            // 3) 换成输码界面
+            card.querySelector('.sg-join-row').innerHTML =
+              '<input type="text" id="sg-join-code" inputmode="numeric" maxlength="8" placeholder="6-digit code" aria-label="Verification code">' +
+              '<button class="btn red" id="sg-join-verify">Verify</button>';
+            msg.textContent = 'We sent a code to ' + mail + '. Enter it below to finish.';
+            msg.className = 'sg-join-msg ok';
+
+            document.getElementById('sg-join-verify').onclick = async () => {
+              const token = (document.getElementById('sg-join-code').value || '').trim();
+              if (!token) { msg.textContent = 'Enter the code from your email.'; msg.className = 'sg-join-msg err'; return; }
+              const vb = document.getElementById('sg-join-verify');
+              const vlabel = vb.textContent;
+              vb.disabled = true; vb.textContent = 'Verifying…';
+              const r = await window.Cloud.verifyOtp({
+                email: mail, verificationId: data.verificationId,
+                isExistingUser: data.isExistingUser, token
+              });
+              if (r.error) {
+                msg.textContent = (r.error && r.error.message) || 'That code is not valid. Try again.';
+                msg.className = 'sg-join-msg err';
+                vb.disabled = false; vb.textContent = vlabel;
+                return;
+              }
+              try { sessionStorage.setItem('aa_email', mail); } catch (e) {}
+              card.querySelector('.sg-join-row').innerHTML = '';
+              card.querySelector('h4').textContent = 'Account created ✓';
+              msg.textContent = 'Your order is saved to your account. Code WELCOME10 is ready for your next order.';
+              msg.className = 'sg-join-msg ok';
+              try { window.App && window.App.refreshAccountUI && window.App.refreshAccountUI(); } catch (e) {}
+            };
+          } catch (err) {
+            msg.textContent = 'Could not create the account right now. Please try again.';
+            msg.className = 'sg-join-msg err';
+            btn.disabled = false;
+            btn.textContent = label;
+          }
+        };
+      }
+
+      function validateAddress() {
+        const need = [
+          ['ck-email', 'Email'],
+          ['ck-name', 'Full name'],
+          ['ck-phone', 'Phone number'],
+          ['ck-addr', 'Street address'],
+          ['ck-city', 'City'],
+          ['ck-state', 'State'],
+          ['ck-zip', 'ZIP code']
+        ];
+        for (const [id, label] of need) {
+          if (!v(id)) { document.getElementById('ck-addr-note').textContent = label + ' is required.'; document.getElementById(id).focus(); return false; }
+        }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v('ck-email'))) {
+          document.getElementById('ck-addr-note').textContent = 'Please enter a valid email address.';
+          document.getElementById('ck-email').focus(); return false;
+        }
+        if (!/^\d{5}(-\d{4})?$/.test(v('ck-zip'))) {
+          document.getElementById('ck-addr-note').textContent = 'Please enter a valid 5-digit ZIP code.';
+          document.getElementById('ck-zip').focus(); return false;
+        }
+        const digits = v('ck-phone').replace(/\D/g, '');
+        if (digits.length < 10 || digits.length > 15) {
+          document.getElementById('ck-addr-note').textContent = 'Please enter a valid phone number (e.g. (555) 123-4567).';
+          document.getElementById('ck-phone').focus(); return false;
+        }
+        document.getElementById('ck-addr-note').textContent = '';
+        return true;
+      }
+
+      async function placeOrder() {
+        if (!lines.length) { window.Layout.toast('Your cart is empty'); return; }
+        if (!validateAddress()) return;
+
+        const btn = document.getElementById('place');
+        const label = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Please wait…';
+
+        try {
+          const r = compute();
+          const si = r.shipInfo || {};
+          const addr2 = v('ck-addr2');
+          const payload = {
+            items: lines, subtotal: r.subtotal, shipping: r.shipping, tax: r.tax, total: r.total,
+            discount_code: applied ? applied.code : null,
+            discount_amount: discountAmount,
+            notes: si.zoneLabel ? `Zone: ${si.zoneLabel} · Weight: ${si.weightOz} oz` : '',
+            ship_name: v('ck-name'),
+            ship_addr: v('ck-addr') + (addr2 ? ', ' + addr2 : ''),
+            ship_city: v('ck-city'),
+            ship_state: v('ck-state'),
+            ship_zip: v('ck-zip'),
+            phone: v('ck-phone'),
+            email: v('ck-email'),
+            payment_provider: '',
+            payment_status: 'unpaid'
+          };
+
+          const { ok, order } = await window.Data.createOrder(payload, session);
+          if (!ok) { window.Layout.toast('Could not place order'); btn.disabled = false; btn.textContent = label; return; }
+          const orderId = order && order.id ? order.id : '';
+
+          // 记录这笔单是不是「单品直结」——支付回跳时据此决定清不清购物车
+          try {
+            if (direct) sessionStorage.setItem('aa_direct_order', String(orderId));
+            else sessionStorage.removeItem('aa_direct_order');
+          } catch (e) {}
+
+          // —— 尝试进入 Stripe 收款 ——
+          let pay = null;
+          try {
+            const resp = await fetch('/api/stripe/checkout', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({
+                order_id: orderId,
+                email: v('ck-email'),
+                state: v('ck-state'),
+                items: lines.map(l => ({ slug: l.slug, name: l.name, price: l.price, qty: l.qty })),
+                subtotal: r.subtotal,
+                discount_amount: discountAmount,
+                discount_code: applied ? applied.code : '',
+                shipping: r.shipping,
+                total: r.total
+              })
+            });
+            pay = await resp.json();
+          } catch (e) { pay = null; }
+
+          if (pay && pay.ok && pay.url) {
+            // 收款页已就绪 → 跳过去。购物车等付款确认后再清。
+            window.location.href = pay.url;
+            return;
+          }
+
+          // —— 已配 Stripe 但建单失败：绝不能假装下单成功 ——
+          if (pay && !pay.ok && pay.reason !== 'not_configured') {
+            const why = (pay.detail && pay.detail.message) || pay.message || pay.error || 'unknown';
+            console.error('[stripe] checkout failed', pay);
+            window.Layout.toast('We couldn\'t start the payment. Please try again.');
+            document.getElementById('ck-addr-note').textContent = 'Payment error: ' + why;
+            return;
+          }
+
+          // —— 未配置 Stripe（或服务端不可达）：保持预览模式，订单存为 pending ——
+          document.getElementById('preview-note').style.display = 'block';
+          if (!direct) window.Store.clear(); // 单品直结不动购物车
+          checkout.style.display = 'none';
+          pageHead.style.display = 'none';
+          done.style.display = 'block';
+          document.getElementById('done-note').className = 'note';
+          document.getElementById('done-note').textContent = '✅ Order saved as pending — no charge was made (preview mode).';
+          document.getElementById('done-id').textContent = 'Order reference: ' + String(orderId).slice(0, 8) + (applied ? ' · code ' + applied.code : '');
+          // 下单成功后邀请注册（转化最高的注册时机）
+          mountJoinCard(v('ck-email'));
+        } finally {
+          btn.disabled = false;
+          btn.textContent = label;
+        }
+      }
+
+      // 进入页面先尝试自动折扣（无需输入）
+      applied = autoDiscount(subtotalOf());
+
+      // 自动应用的提示统一到最终 renderSummary 之后再写（renderSummary 会重建 ck-note）
+      let autoNote = '';
+
+      // 刚通过注册弹窗/页脚订阅拿到的欢迎码：自动填入并应用（顾客零操作）
+      try {
+        const wc = sessionStorage.getItem('uslatiao_welcome_code');
+        if (wc) {
+          sessionStorage.removeItem('uslatiao_welcome_code');
+          const r = window.Data.validateDiscount(wc, subtotalOf(), discounts, { items: lines, firstOrder, codeUsage: usageOf(wc) });
+          if (r.ok) applied = Object.assign({}, r.discount, { amount: r.amount });
+        }
+      } catch (e) {}
+
+      // 新客首单：10% 欢迎码自动填入并应用（顾客零操作）。
+      // 码被停用/改配置时不满足校验，静默跳过，绝不挡结账。
+      if (!applied && firstOrder) {
+        const wr = window.Data.validateDiscount('WELCOME10', subtotalOf(), discounts, { items: lines, firstOrder: true, codeUsage: usageOf('WELCOME10') });
+        if (wr.ok) {
+          applied = Object.assign({}, wr.discount, { amount: wr.amount });
+          autoNote = 'First order? 10% off applied automatically';
+        }
+      }
+
+      // 探测服务端是否已配 Stripe：有密钥就把按钮改成「Pay $xx」
+      try {
+        const probe = await fetch('/api/stripe/config', { cache: 'no-store' });
+        const pj = await probe.json();
+        liveMode = !!(pj && pj.live);
+      } catch (e) { liveMode = false; }
+      if (liveMode) document.getElementById('preview-note').style.display = 'none';
+
+      renderSummary();
+      if (autoNote) {
+        const note = document.getElementById('ck-note');
+        if (note) { note.style.color = '#2e8b57'; note.textContent = autoNote; }
+      }
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shop All Snacks — HICHEN Asian Market</title>
+  <link rel="canonical" href="https://www.uslatiao.com/shop.html">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="HICHEN Asian Market">
+  <meta property="og:image" content="https://www.uslatiao.com/assets/img/og-cover.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="HICHEN Asian Market - The Spicy Food Lover's Paradise.">
+  <meta name="twitter:image" content="https://www.uslatiao.com/assets/img/og-cover.jpg">
+  <meta property="og:title" content="Shop All Snacks — HICHEN Asian Market">
+  <meta property="og:description" content="Shop all Asian snacks at HICHEN Asian Market: spicy strips, chocolate bites, variety packs and bundles. Stocked in the US, ships in 1 business day.">
+  <meta property="og:url" content="https://www.uslatiao.com/shop.html">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Shop All Snacks — HICHEN Asian Market">
+  <meta name="twitter:description" content="Shop all Asian snacks at HICHEN Asian Market: spicy strips, chocolate bites, variety packs and bundles. Stocked in the US, ships in 1 business day.">
+  <meta name="description" content="Shop all Asian snacks at HICHEN Asian Market: spicy strips, chocolate bites, variety packs and bundles. Stocked in the US, ships in 1 business day.">
+  <link rel="stylesheet" href="assets/css/styles.css?v=42">
+  <script src="https://cdn.jsdelivr.net/npm/@tencent-ai/workbuddy-cloud-sdk@dev/lib/index.global.js"></script>
+</head>
+<body>
+  <div id="site-header"></div>
+
+  <div class="trustbar">
+    <div class="container">
+      <span class="t"><i></i>Ships from our US warehouse in 1 business day</span>
+      <span class="t"><i></i>Free shipping over <b>$35</b></span>
+    </div>
+  </div>
+
+  <section class="section container" style="padding-top:20px">
+    <div class="aisle">
+      <aside class="aisle-nav" id="shop-rail"></aside>
+      <div class="aisle-main">
+        <div id="shop-note"></div>
+        <div class="pillrow" id="filters"></div>
+        <div class="pillrow" id="heat-filters" style="margin-top:-10px"></div>
+        <div id="shop-body"></div>
+      </div>
+    </div>
+  </section>
+
+  <div id="site-footer"></div>
+
+  <script src="assets/js/config.js?v=15"></script>
+  <script src="assets/js/cloud.js?v=9"></script>
+  <script src="assets/js/store.js?v=8"></script>
+  <script src="assets/js/data.js?v=32"></script>
+  <script src="assets/js/signup.js?v=3"></script><script src="assets/js/layout.js?v=14"></script>
+  <script src="assets/js/app.js?v=7"></script>
+<script src="assets/js/analytics.js?v=1"></script>
+  <script src="assets/js/shop.js?v=21"></script>
+  <script>
+    (async function () {
+      const esc = s => String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      const params = new URLSearchParams(location.search);
+      const urlCat = params.get('cat') || 'all';
+      const urlHeat = params.get('heat') || 'all';
+      const q = (params.get('q') || '').trim();
+
+      const all = window.Shop.sellable(await window.Data.getProducts());
+      window.Shop.setSoldCounts(await window.Data.getSoldCounts());
+      let cats = [{ key: 'all', label: 'All', cn: '' }];
+      try {
+        const list = await window.Data.getProductCategories();
+        cats = cats.concat(list.filter(c => c.enabled !== false)
+          .map(c => ({ key: c.key, label: c.label || c.label_en || c.key, cn: c.label_cn || '' })));
+      } catch (e) {}
+      const cnt = key => all.filter(p => p.category === key).length;
+      const hc = band => window.Shop.filterByHeat(all, band).length;
+      const catOf = key => cats.filter(c => c.key === key)[0];
+
+      /* —— 左栏：分类 + 辣度 —— */
+      const rail = document.getElementById('shop-rail');
+      if (rail) {
+        rail.innerHTML = `
+          <div class="grp">Browse aisles</div>
+          <a href="shop.html" class="${urlCat === 'all' && !q ? 'on' : ''}"><span>All snacks</span><span class="n">${all.length}</span></a>
+          ${cats.filter(c => c.key !== 'all').map(c =>
+            `<a href="shop.html?cat=${encodeURIComponent(c.key)}" class="${urlCat === c.key ? 'on' : ''}"><span>${esc(c.label)}</span><span class="n">${cnt(c.key)}</span></a>`).join('')}
+          <div class="grp">Shop by heat</div>
+          <a href="shop.html?heat=mild" class="${urlHeat === 'mild' ? 'on' : ''}"><span>Mild · Heat 1–2</span><span class="n">${hc('mild')}</span></a>
+          <a href="shop.html?heat=medium" class="${urlHeat === 'medium' ? 'on' : ''}"><span>Medium · Heat 3</span><span class="n">${hc('medium')}</span></a>
+          <a href="shop.html?heat=hot" class="${urlHeat === 'hot' ? 'on' : ''}"><span>Hot · Heat 4–5</span><span class="n">${hc('hot')}</span></a>`;
+      }
+
+      /* —— 分类药丸 —— */
+      const filters = document.getElementById('filters');
+      filters.innerHTML = cats.map(c => `<button data-cat="${esc(c.key)}" class="${c.key === urlCat ? 'on' : ''}">${esc(c.label)}</button>`).join('');
+      filters.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+        location.href = b.dataset.cat === 'all' ? 'shop.html' : 'shop.html?cat=' + b.dataset.cat;
+      }));
+
+      /* —— 辣度药丸 —— */
+      const heatBox = document.getElementById('heat-filters');
+      const HEATS = [{ k: 'all', l: 'All heat' }, { k: 'mild', l: 'Mild 1–2' }, { k: 'medium', l: 'Medium 3' }, { k: 'hot', l: 'Hot 4–5' }];
+      heatBox.innerHTML = HEATS.map(h => `<button data-heat="${h.k}" class="${h.k === urlHeat ? 'on' : ''}">${h.l}</button>`).join('');
+      heatBox.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+        const u = new URLSearchParams(location.search);
+        if (b.dataset.heat === 'all') u.delete('heat'); else u.set('heat', b.dataset.heat);
+        u.delete('q');
+        location.href = 'shop.html' + (u.toString() ? '?' + u.toString() : '');
+      }));
+
+      /* —— 内容区 —— */
+      const body = document.getElementById('shop-body');
+      const note = document.getElementById('shop-note');
+      let list = all.slice();
+      if (urlCat !== 'all') list = window.Shop.filterProducts(list, urlCat);
+      if (urlHeat !== 'all') list = window.Shop.filterByHeat(list, urlHeat);
+      if (q) list = window.Shop.searchProducts(list, q);
+
+      if (q) {
+        note.innerHTML = `<div class="searchbar">
+          <span class="q">Results for <b>&ldquo;${esc(q)}&rdquo;</b></span>
+          <span class="cnt">${list.length} item${list.length === 1 ? '' : 's'}</span></div>`;
+        body.innerHTML = `<div class="grid" id="shop-grid"></div>`;
+        window.Shop.renderGrid(document.getElementById('shop-grid'), list);
+      } else if (urlHeat !== 'all') {
+        const label = { mild: 'Mild · Heat 1–2', medium: 'Medium · Heat 3', hot: 'Hot · Heat 4–5' }[urlHeat] || 'Snacks';
+        body.innerHTML = `<div class="shelf" id="shop-shelf"></div>`;
+        window.Shop.renderShelf(document.getElementById('shop-shelf'), list, {
+          title: label, empty: 'No snacks in this heat range yet.'
+        });
+      } else if (urlCat !== 'all') {
+        const c = catOf(urlCat);
+        body.innerHTML = `<div class="shelf" id="shop-shelf"></div>`;
+        window.Shop.renderShelf(document.getElementById('shop-shelf'), list, {
+          title: c ? c.label : urlCat, empty: 'Nothing on this shelf yet.'
+        });
+      } else {
+        body.innerHTML = `<div class="shelf">
+            <div class="shelf-head"><div><h2>All snacks</h2><span class="cn">${list.length} items</span></div></div>
+            <div class="grid" id="shop-grid"></div>
+          </div>`;
+        window.Shop.renderGrid(document.getElementById('shop-grid'), list);
+      }
+
+      /* —— 顶栏搜索框回填关键词 —— */
+      const si = document.getElementById('topsearch-input');
+      if (si && q) si.value = q;
+    })();
+  </script>
+</body>
+</html>

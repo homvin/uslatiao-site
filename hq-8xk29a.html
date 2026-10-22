@@ -1,0 +1,2795 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>店铺后台 — HICHEN Asian Market</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="stylesheet" href="assets/css/styles.css?v=42">
+  <!-- 云 SDK 容错加载：jsdelivr 抽风/被拦截时自动回退 unpkg，避免读不到登录态导致后台整页空白 -->
+  <script>
+  (function () {
+    var CDNS = [
+      'https://cdn.jsdelivr.net/npm/@tencent-ai/workbuddy-cloud-sdk@dev/lib/index.global.js',
+      'https://unpkg.com/@tencent-ai/workbuddy-cloud-sdk@dev/lib/index.global.js'
+    ];
+    function load(i) {
+      if (i >= CDNS.length) { window.__CLOUD_SDK_FAILED = true; return; }
+      var s = document.createElement('script');
+      s.src = CDNS[i];
+      s.async = false;
+      s.onload = function () { if (!window.WorkBuddyCloud) load(i + 1); };
+      s.onerror = function () { load(i + 1); };
+      document.head.appendChild(s);
+    }
+    load(0);
+  })();
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <div id="site-header"></div>
+
+  <div class="container page-head">
+    <h1>店铺后台</h1>
+    <p class="muted">仪表盘 · 商品 · 订单与发货 · 营销 · 顾客 · 库存 · 评价</p>
+  </div>
+
+  <section class="section container" style="padding-top:10px">
+    <!-- 后台独立登录系统：与前台顾客账号体系分离（独立会话存储 + admin_users 名单控制权限） -->
+    <div id="gate" style="display:none" class="form">
+      <div class="note" id="gate-msg">后台需要单独登录。请输入管理员邮箱与验证码。</div>
+      <div id="admin-login">
+        <div style="margin-bottom:10px">
+          <label class="muted" style="font-size:12px;display:block;margin-bottom:4px">管理员邮箱</label>
+          <input id="al-email" type="email" placeholder="admin@example.com" autocomplete="username" style="width:100%;padding:10px;border:1px solid var(--line,#e5e7eb);border-radius:8px">
+        </div>
+        <div style="margin-bottom:10px">
+          <label class="muted" style="font-size:12px;display:block;margin-bottom:4px">邮箱验证码</label>
+          <input id="al-code" inputmode="numeric" placeholder="6 位数字" autocomplete="one-time-code" style="width:100%;padding:10px;border:1px solid var(--line,#e5e7eb);border-radius:8px">
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+          <button class="btn small" id="al-send">发送验证码</button>
+          <button class="btn red" id="al-login">登录后台</button>
+          <span class="muted" id="al-msg" style="font-size:12px"></span>
+        </div>
+        <p class="muted" style="font-size:12px;margin-top:12px">这是独立的后台登录系统，与前台顾客账号互不影响。首次登录请先用「发送验证码」注册该邮箱。</p>
+      </div>
+      <button class="btn small" style="margin-top:10px" onclick="location.reload()">刷新重试</button>
+      <div class="muted" id="gate-diag" style="font-size:12px;margin-top:10px"></div>
+    </div>
+
+    <div id="admin" style="display:none">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+        <div class="muted" id="admin-who" style="font-size:12px"></div>
+        <button class="btn small ghost" id="admin-signout">退出后台登录</button>
+      </div>
+      <div class="admin-tabs">
+        <button id="tab-dash" class="active">仪表盘</button>
+        <button id="tab-products">商品</button>
+        <button id="tab-orders">订单与发货</button>
+        <button id="tab-marketing">营销</button>
+        <button id="tab-customers">顾客</button>
+        <button id="tab-inventory">库存</button>
+        <button id="tab-reviews">评价</button>
+        <button id="tab-shipping">物流设置</button>
+        <button id="tab-home">首页装修</button>
+        <button id="tab-cats">商品分类</button>
+        <button id="tab-admins" style="display:none">管理员</button>
+      </div>
+
+      <!-- ============ DASHBOARD ============ -->
+      <div id="panel-dash">
+        <div id="kpi" class="kpi-grid"></div>
+        <div class="tool-row">
+          <button class="btn small" id="exp-orders">⬇ 导出订单 CSV</button>
+          <button class="btn small" id="exp-products">⬇ 导出商品 CSV</button>
+        </div>
+        <div class="chart-grid">
+          <div class="chart-card"><h4>近 14 天营收</h4><canvas id="chart-revenue" height="120"></canvas></div>
+          <div class="chart-card"><h4>订单状态分布</h4><canvas id="chart-status" height="120"></canvas></div>
+          <div class="chart-card" style="grid-column:1 / -1"><h4>热销商品（按销量）</h4><canvas id="chart-top" height="120"></canvas></div>
+        </div>
+
+        <h3 style="margin:28px 0 4px;font-size:18px">网站浏览</h3>
+        <p class="muted" style="font-size:12px;margin:0 0 12px">前台访客行为（匿名会话，不含后台自身访问）。顾客打开页面即实时入库，数据源 <code>page_views</code>。</p>
+        <div id="ana-kpi" class="kpi-grid"></div>
+        <div class="chart-grid">
+          <div class="chart-card" style="grid-column:1 / -1"><h4>近 14 天浏览 / 访客（PV · UV）</h4><canvas id="chart-ana-trend" height="120"></canvas></div>
+          <div class="chart-card"><h4>流量来源</h4><canvas id="chart-ana-source" height="150"></canvas></div>
+          <div class="chart-card"><h4>设备分布</h4><canvas id="chart-ana-device" height="150"></canvas></div>
+          <div class="chart-card" style="grid-column:1 / -1"><h4>转化漏斗（按会话）</h4><canvas id="chart-ana-funnel" height="110"></canvas></div>
+          <div class="chart-card"><h4>热门页面 Top 8</h4><canvas id="chart-ana-pages" height="170"></canvas></div>
+          <div class="chart-card"><h4>热门商品（按浏览）</h4><canvas id="chart-ana-products" height="170"></canvas></div>
+          <div class="chart-card"><h4>访客归属地 · 国家/地区 Top 8</h4><p class="muted" style="font-size:12px;margin:0 0 8px">按访客去重 · 同一个人多次浏览只计 1</p><p class="muted" id="hint-ana-country" style="display:none;font-size:12px;margin:0 0 8px">还没有地理位置数据：Cloudflare Worker 部署新版后开始记录（由边缘自动判定，无需顾客授权），重贴后当天见效。</p><canvas id="chart-ana-country" height="150"></canvas></div>
+          <div class="chart-card"><h4>访客归属地 · 美国州/区 Top 8</h4><p class="muted" style="font-size:12px;margin:0 0 8px">按访客去重 · 仅统计国家为美国的访客</p><p class="muted" id="hint-ana-region" style="display:none;font-size:12px;margin:0 0 8px">暂无州/区数据：仅统计国家为美国的访客，或等 Worker 部署新版。</p><canvas id="chart-ana-region" height="150"></canvas></div>
+          <div class="chart-card" style="grid-column:1 / -1"><h4>来源链接 · 外部引荐域名 Top 8</h4><p class="muted" style="font-size:12px;margin:0 0 8px">按访客去重 · 取每个会话的入口页来源（已去 www 前缀）</p><p class="muted" id="hint-ana-referrer" style="display:none;font-size:12px;margin:0 0 8px">暂无外部引荐：流量目前全部来自直接访问或自然搜索。别的网站/帖子挂上我们链接后，这里会出现对方域名。</p><canvas id="chart-ana-referrer" height="150"></canvas></div>
+          <div class="chart-card" style="grid-column:1 / -1"><h4>来源链接 · UTM 活动拆解 Top 8</h4><p class="muted" style="font-size:12px;margin:0 0 8px">按访客去重 · 投放链接带 <code>?utm_source=xx</code> 才会出现</p><p class="muted" id="hint-ana-utm" style="display:none;font-size:12px;margin:0 0 8px">暂无 UTM 数据：投放广告或发引流链接时加上 <code>?utm_source=xx&amp;utm_campaign=xx</code> 即可在这里看到每条渠道带来的浏览。</p><canvas id="chart-ana-utm" height="150"></canvas></div>
+        </div>
+      </div>
+
+      <!-- ============ PRODUCTS ============ -->
+      <div id="panel-products" style="display:none">
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
+          <button class="btn red small" id="add-product">+ 新增商品</button>
+          <button class="btn small" id="imp-product">⬆ 批量导入（草稿）</button>
+          <button class="btn small" id="seed">载入示例数据</button>
+        </div>
+        <div id="product-import" style="display:none" class="summary">
+          <h3 style="margin:0 0 8px;font-size:16px">批量导入（全部以「草稿」落库，运营改完再上架）</h3>
+          <p class="muted" style="font-size:13px;margin:0 0 10px">粘贴 CSV（首行表头）或 JSON 数组，也可以选择 .csv 文件。表头列：
+            <code>source_url,name_cn,name_en,category,price_usd,stock,sold_count,heat,weight_oz,variant_label,variant_price_usd,images,tags,compare_at_usd,subtitle_en,note</code>。
+            模板：<a href="deploy/product-import-template.csv" download>product-import-template.csv</a></p>
+          <textarea id="imp-text" rows="8" placeholder="source_url,name_cn,name_en,category,price_usd,stock,heat,weight_oz,..." style="width:100%;padding:10px;border:1px solid var(--line,#e5e7eb);border-radius:8px;font-family:monospace;font-size:12px"></textarea>
+          <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap;align-items:center">
+            <button class="btn small" id="imp-parse">解析预览</button>
+            <button class="btn red small" id="imp-run" style="display:none">确认导入</button>
+            <label class="btn small" style="cursor:pointer">选择文件<input type="file" id="imp-file" accept=".csv,.json,.txt" style="display:none"></label>
+            <span class="muted" id="imp-msg" style="font-size:12px"></span>
+          </div>
+          <div id="imp-preview" style="margin-top:12px"></div>
+        </div>
+        <div id="product-form" style="display:none" class="summary"></div>
+        <div id="product-list"></div>
+      </div>
+
+      <!-- ============ ORDERS ============ -->
+      <div id="panel-orders" style="display:none">
+        <div id="order-filters" class="filter-row"></div>
+        <div id="order-list"></div>
+      </div>
+
+      <!-- ============ MARKETING ============ -->
+      <div id="panel-marketing" style="display:none">
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
+          <button class="btn red small" id="add-discount">+ 新建折扣</button>
+        </div>
+        <div id="discount-form" style="display:none" class="summary"></div>
+        <h3 style="margin:22px 0 10px;font-size:18px">折扣效果分析（ROI）</h3>
+        <div id="discount-roi"></div>
+        <h3 style="margin:22px 0 10px;font-size:18px">全部折扣</h3>
+        <div id="discount-list"></div>
+        <h3 style="margin:26px 0 10px;font-size:18px">邮件订阅者（注册/邮件名单）</h3>
+        <div class="note blue" style="margin-bottom:10px">访客在前台注册入口留了邮箱就会进这里（滚动弹窗 / 页脚订阅条 / 下单后邀请）。这张名单是发营销邮件和唤醒沉睡客户的池子，<strong>注意别给非客户群发</strong>。</div>
+        <div class="tool-row" style="margin-bottom:10px">
+          <button class="btn small" id="exp-subs">⬇ 导出订阅者 CSV</button>
+        </div>
+        <div id="subscriber-list"></div>
+      </div>
+
+      <!-- ============ CUSTOMERS ============ -->
+      <div id="panel-customers" style="display:none">
+        <div id="customer-list"></div>
+      </div>
+
+      <!-- ============ INVENTORY ============ -->
+      <div id="panel-inventory" style="display:none">
+        <div class="note blue">低库存预警：库存为 <strong>0</strong> 显示缺货；库存 <strong>10 及以下</strong> 标记为偏低，建议补货。</div>
+        <div id="inventory-list"></div>
+      </div>
+
+      <!-- ============ REVIEWS ============ -->
+      <div id="panel-reviews" style="display:none">
+        <div id="review-list"></div>
+      </div>
+
+      <!-- ============ SHIPPING ============ -->
+      <div id="panel-shipping" style="display:none">
+        <div id="shipping-panel"></div>
+      </div>
+
+      <!-- ============ HOME ============ -->
+      <div id="panel-home" style="display:none">
+        <div id="home-panel"></div>
+      </div>
+
+      <!-- ============ CATEGORIES ============ -->
+      <div id="panel-cats" style="display:none">
+        <div id="cats-panel"></div>
+      </div>
+
+      <!-- ============ ADMINS（后台管理员名单，仅 owner 可见可管） ============ -->
+      <div id="panel-admins" style="display:none">
+        <div class="note blue" style="margin-bottom:12px">后台管理员名单。只有表内<strong>启用中</strong>的邮箱能登录后台；<strong>owner</strong> 可以管理名单（增删改）。这是独立于前台顾客账号的权限体系。</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;align-items:flex-end">
+          <div>
+            <label class="muted" style="font-size:12px;display:block;margin-bottom:4px">邮箱</label>
+            <input id="ad-email" type="email" placeholder="new-admin@example.com" style="padding:9px;border:1px solid var(--line,#e5e7eb);border-radius:8px;min-width:240px">
+          </div>
+          <div>
+            <label class="muted" style="font-size:12px;display:block;margin-bottom:4px">备注名</label>
+            <input id="ad-name" placeholder="例如：运营-小李" style="padding:9px;border:1px solid var(--line,#e5e7eb);border-radius:8px;min-width:160px">
+          </div>
+          <div>
+            <label class="muted" style="font-size:12px;display:block;margin-bottom:4px">角色</label>
+            <select id="ad-role" style="padding:9px;border:1px solid var(--line,#e5e7eb);border-radius:8px">
+              <option value="admin">admin（可管理店铺）</option>
+              <option value="owner">owner（可管理管理员）</option>
+            </select>
+          </div>
+          <button class="btn red small" id="ad-add">+ 添加管理员</button>
+        </div>
+        <div id="admin-list"></div>
+      </div>
+    </div>
+  </section>
+
+  <div id="site-footer"></div>
+
+  <script src="assets/js/config.js?v=14"></script>
+  <script src="assets/js/cloud.js?v=9"></script>
+  <script src="assets/js/store.js?v=8"></script>
+  <script src="assets/js/data.js?v=32"></script>
+  <script src="assets/js/layout.js?v=11"></script>
+  <script src="assets/js/app.js?v=7"></script>
+  <script src="assets/js/shop.js?v=21"></script>
+  <script>
+  (async function () {
+    const $ = id => document.getElementById(id);
+
+    // —— 后台独立登录系统 ——
+    // ① 独立会话：后台专用客户端（admin-hq: 存储命名空间），前台顾客登录互不影响
+    // ② 独立权限：admin_users 名单（表内 active 邮箱才进得了后台），替代原先写死的单个邮箱
+    if (window.Cloud.initAdminClient) await window.Cloud.initAdminClient();
+
+    function showGate(msg) {
+      const gMsg = $('gate-msg');
+      if (gMsg && msg) gMsg.innerHTML = msg;
+      const g = $('gate'); if (g) g.style.display = 'block';
+      const a = $('admin'); if (a) a.style.display = 'none';
+    }
+
+    let ME = null; // 当前管理员身份（admin_users 行）
+
+    async function tryEnter() {
+      let session = null;
+      try { session = await window.Cloud.getSession(); } catch (e) {}
+      const email = window.Cloud.userEmail ? (window.Cloud.userEmail(session) || '') : '';
+      const gDiag = $('gate-diag');
+      if (gDiag) gDiag.textContent = '诊断：SDK=' + (window.WorkBuddyCloud ? '已加载' : '未加载')
+        + ' · 登录态=' + (session && session.user ? '已登录' : '未登录')
+        + ' · 账号=' + (email || '(空)');
+      if (!session || !session.user || !email) {
+        showGate(window.__CLOUD_SDK_FAILED
+          ? '<strong>云服务组件未能加载</strong>（CDN 被拦截或网络异常）。请点「刷新重试」，或换网络/关掉代理后重试。'
+          : '尚未登录后台。请输入管理员邮箱与验证码。');
+        return null;
+      }
+      let lookup = null;
+      try { lookup = await window.Data.getAdminByEmail(email); } catch (e) {}
+      if (lookup && lookup.ok === false) {
+        // 读取失败（网络波动等）：不踢会话，明确区分于「不在名单」
+        showGate('后台名单读取失败：' + (lookup.error || '未知错误') + '。请点「刷新重试」，若持续失败请截图反馈。');
+        return null;
+      }
+      let me = (lookup && lookup.ok && lookup.row && lookup.row.active) ? lookup.row : null;
+      if (!me) {
+        // 查不到身份：先刷新 token 再查一次（token 过期掉回 anon 时，RLS 会静默查空行，
+        // 这不是「不是管理员」，绝不能据此踢会话——踢会话正是「莫名被登出」的体感来源）
+        try {
+          const c = window.Cloud.adminInstance;
+          if (c && c.auth && c.auth.refreshSession) await c.auth.refreshSession();
+          lookup = await window.Data.getAdminByEmail(email);
+          if (lookup && lookup.ok && lookup.row && lookup.row.active) me = lookup.row;
+        } catch (e) {}
+      }
+      if (!me) {
+        // 仍查不到：只提示，不动会话
+        const gDiag2 = $('gate-diag');
+        if (gDiag2) gDiag2.textContent += ' · 名单核对=' + (lookup && lookup.ok ? (lookup.row ? '命中' : '未命中') : '查询失败');
+        showGate('当前账号 <strong>' + email + '</strong> 未通过后台管理员校验（登录态可能已过期，或不在名单内）。' +
+          '请点下方「刷新重试」；若持续出现，请重新登录，或让 owner 在后台「管理员」页签确认你的邮箱。');
+        return null;
+      }
+      $('gate').style.display = 'none';
+      $('admin').style.display = 'block';
+      ME = me;
+      // 进门即刷新身份显示（登录流程不等整页刷新也要正确）
+      const whoEl = $('admin-who');
+      if (whoEl) {
+        whoEl.textContent = '后台登录账号：' + email + ' · ' + (me.role === 'owner' ? 'owner（可管理管理员）' : 'admin');
+        whoEl.style.color = '';
+      }
+      if (me.role === 'owner') $('tab-admins').style.display = '';
+      return me;
+    }
+
+    const me = await tryEnter();
+    if (!me) {
+      // —— 登录卡片：发码 → 验码 → 再走门禁 ——
+      const msgEl = $('al-msg');
+      let pending = null;
+      const withTimeout = (p, ms) => Promise.race([
+        Promise.resolve(p),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))
+      ]);
+      $('al-send').onclick = async () => {
+        const email = ($('al-email').value || '').trim();
+        if (!email || !email.includes('@')) { msgEl.textContent = '请先填写有效邮箱'; return; }
+        const btn = $('al-send');
+        btn.disabled = true; msgEl.textContent = '发送中…';
+        try {
+          const { data, error } = await withTimeout(window.Cloud.sendOtp(email), 15000);
+          if (error || !data) { msgEl.textContent = '发送失败：' + ((error && error.message) || '请稍后再试'); btn.disabled = false; return; }
+          pending = { email, verificationId: data.verificationId, isExistingUser: data.isExistingUser };
+          msgEl.textContent = '验证码已发送，请查收邮件（含垃圾箱）。';
+        } catch (e) { msgEl.textContent = '发送超时/失败：' + String((e && e.message) || e) + '，请重试'; }
+        btn.disabled = false;
+      };
+      $('al-login').onclick = async () => {
+        const code = ($('al-code').value || '').trim();
+        if (!pending) { msgEl.textContent = '请先点「发送验证码」'; return; }
+        if (!code) { msgEl.textContent = '请输入验证码'; return; }
+        const btn = $('al-login');
+        btn.disabled = true; msgEl.textContent = '登录中…';
+        try {
+          const r = await withTimeout(window.Cloud.verifyOtp({ email: pending.email, verificationId: pending.verificationId, isExistingUser: pending.isExistingUser, token: code }), 20000);
+          if (r && r.error) { msgEl.textContent = '验证码错误或已过期'; btn.disabled = false; return; }
+          const ok = await tryEnter();
+          if (ok) location.reload(); // 进门后整体重载，保证各模块拿到的都是管理员会话
+          else { msgEl.textContent = '登录成功但未通过管理员校验，请照上方提示操作。'; btn.disabled = false; }
+        } catch (e) {
+          msgEl.textContent = '登录超时/失败：' + String((e && e.message) || e) + '。请重试或刷新页面。';
+          btn.disabled = false;
+        }
+      };
+      return;
+    }
+
+    // ================= 以下为后台主体 =================
+    document.getElementById('admin').style.display = 'block';
+
+    // 页眉实时显示当前登录账号与角色：防止切号后保存莫名失败还看不出原因
+    const drawWho = async () => {
+      try {
+        const s = await window.Cloud.getSession();
+        const who = (window.Cloud.userEmail && window.Cloud.userEmail(s)) || '';
+        const el = $('admin-who');
+        if (!el) return;
+        el.textContent = who
+          ? ('后台登录账号：' + who + (ME ? ' · ' + (ME.role === 'owner' ? 'owner（可管理管理员）' : 'admin') : ''))
+          : '后台登录账号：(未登录)';
+        el.style.color = who ? '' : '#b91c1c';
+      } catch (e) {}
+    };
+    drawWho();
+    try { window.Cloud.onChange && window.Cloud.onChange(drawWho); } catch (e) {}
+
+    // 退出后台登录（只退后台会话，前台顾客登录态不动）
+    $('admin-signout').onclick = async () => {
+      const btn = $('admin-signout');
+      btn.disabled = true; btn.textContent = '退出中…';
+      try { await window.Cloud.adminSignOut(); } catch (e) {}
+      location.reload();
+    };
+
+    // 管理员页签仅 owner 可见
+    if (ME && ME.role === 'owner') $('tab-admins').style.display = '';
+
+    // —— 登录态自愈 ——
+    // 会话 token 过期且续期失败/冷却时，数据库请求会静默降级为 anon，
+    // 所有后台写操作都会报 "permission denied for table xxx"（授权层面错，
+    // 不是 RLS 错）。对策：① 进后台先强刷一次 token；② 给全部写操作包一层，
+    // 遇到权限类报错先续期再自动重试一次，仍失败则翻译成「请重新登录」。
+    try {
+      const c0 = window.Cloud.adminInstance;
+      if (c0 && c0.auth && c0.auth.refreshSession) await c0.auth.refreshSession();
+    } catch (e) {}
+    // 权限类报错有两种：① "permission denied"（请求掉回 anon，授权层）
+    // ② "new row violates row-level security policy"（已登录但当前账号不是
+    // 管理员——常见于在别的页面切换了账号，后台标签页还是旧的）。
+    const PERM_RE = /permission denied|row-level security/i;
+    const ADMIN_WRITE_FNS = ['saveProduct', 'publishProducts', 'deleteProduct', 'seedFromJson',
+      'saveDiscount', 'deleteDiscount', 'updateOrder', 'refundOrder', 'updateReview', 'deleteReview',
+      'saveShippingSettings', 'saveShippingTemplate', 'deleteShippingTemplate', 'saveHomeSettings',
+      'saveProductCategories', 'deleteSubscriber'];
+    ADMIN_WRITE_FNS.forEach(name => {
+      const orig = window.Data[name];
+      if (typeof orig !== 'function') return;
+      window.Data[name] = async function () {
+        const args = arguments;
+        const run = () => orig.apply(this, args).catch(e => ({ ok: false, error: String((e && e.message) || e) }));
+        let r;
+        try { r = await run(); } catch (e) { r = { ok: false, error: String((e && e.message) || e) }; }
+        if (!r || r.ok !== false || !PERM_RE.test(String(r.error || ''))) return r;
+        // 权限/RLS 类报错：先弄清当前会话是谁（按 admin_users 名单判定，与门禁同源）；
+        // 不是管理员直接给可读提示，是管理员才续期重试
+        let curEmail = '';
+        let curIsAdmin = false;
+        try {
+          const s = await window.Cloud.getSession();
+          curEmail = ((window.Cloud.userEmail && window.Cloud.userEmail(s)) || '').toLowerCase();
+          if (curEmail) {
+            const rr = await window.Data.getAdminByEmail(curEmail);
+            curIsAdmin = !!(rr && rr.ok && rr.row && rr.row.active);
+          }
+        } catch (e) {}
+        if (curEmail && !curIsAdmin) {
+          return { ok: false, error: '当前登录账号是 ' + curEmail + '，不是后台管理员（可能在测试时切换了登录）。请用管理员邮箱登录后台，再回来保存。' };
+        }
+        try {
+          const c = window.Cloud.adminInstance;
+          if (c && c.auth && c.auth.refreshSession) await c.auth.refreshSession();
+        } catch (e) {}
+        try { r = await run(); } catch (e) { r = { ok: false, error: String((e && e.message) || e) }; }
+        if (r && r.ok === false && PERM_RE.test(String(r.error || ''))) {
+          r.error = '登录态已失效（权限不足）。请到 My Account 退出后用管理员邮箱重新登录，再回来保存。';
+        }
+        return r;
+      };
+    });
+
+    const STATUS_LABEL = { pending: '待处理', paid: '已付款', shipped: '已发货', delivered: '已送达', cancelled: '已取消', refunded: '已退款' };
+    const slugify = s => (s||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'');
+
+    /* —— 保存进度反馈：顶部细进度条 + 按钮转圈置灰，让「正在保存」看得见 —— */
+    let savingCount = 0;
+    function savingBar(show) {
+      let bar = document.getElementById('save-progress');
+      if (!bar) { bar = document.createElement('div'); bar.id = 'save-progress'; document.body.appendChild(bar); }
+      bar.classList.toggle('on', !!show);
+    }
+    function setBtnSaving(btn, on, label) {
+      if (!btn) return;
+      if (on) {
+        btn.dataset.label = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spin"></span>' + (label || '保存中…');
+      } else {
+        btn.disabled = false;
+        if (btn.dataset.label) btn.innerHTML = btn.dataset.label;
+      }
+    }
+    async function withSaving(btn, fn, label) {
+      savingCount++;
+      savingBar(true);
+      setBtnSaving(btn, true, label);
+      try { return await fn(); }
+      finally {
+        savingCount = Math.max(0, savingCount - 1);
+        if (!savingCount) savingBar(false);
+        setBtnSaving(btn, false);
+      }
+    }
+
+    // 分类中文名：优先读后台「商品分类」配置，读不到用时下面的旧名字兜底
+    const CAT_CN = {
+      'spicy-strips': '辣味条',
+      'chocolate-bites': '巧克力小食',
+      'variety-packs': '混合尝鲜包',
+      'bundles': '组合套餐'
+    };
+    let CAT_LIST = [];
+    function catCn(key) {
+      const hit = CAT_LIST.filter(c => c.key === key)[0];
+      if (hit) return hit.label_cn || hit.label_en || key;
+      return CAT_CN[key] || (window.Shop.categoryCn ? window.Shop.categoryCn(key) : key);
+    }
+    function catEn(key) {
+      const hit = CAT_LIST.filter(c => c.key === key)[0];
+      if (hit) return hit.label_en || key;
+      return CAT_CN[key] || (window.Shop.categoryLabel ? window.Shop.categoryLabel(key) : key);
+    }
+    async function reloadCats() {
+      try { CAT_LIST = await window.Data.getProductCategories(); } catch (e) { CAT_LIST = []; }
+    }
+    // 若商品编辑表单当前打开，实时刷新「分类」下拉（保留已选值），让新增/改名立即生效
+    function refreshCatSelect() {
+      const sel = document.getElementById('f-cat');
+      if (!sel) return;
+      const cur = sel.value;
+      sel.innerHTML = CAT_LIST.map(c => `<option value="${c.key}" ${c.key === cur ? 'selected' : ''}>${catCn(c.key)} · ${c.label_en || c.key}${c.enabled === false ? '（停用）' : ''}</option>`).join('');
+    }
+
+    // 客户端压缩图片：限制最大宽度、输出 JPEG（透明处填白），返回 base64 data URI
+    function compressImage(file, maxW, quality) {
+      return new Promise((resolve, reject) => {
+        if (!file || !file.type || file.type.indexOf('image/') !== 0) { reject(new Error('Not an image file')); return; }
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error('Could not read file'));
+        reader.onload = () => {
+          const img = new Image();
+          img.onerror = () => reject(new Error('Could not decode image'));
+          img.onload = () => {
+            let w = img.width, h = img.height;
+            if (w > maxW) { h = Math.round(h * maxW / w); w = maxW; }
+            const canvas = document.createElement('canvas');
+            canvas.width = w; canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, w, h);
+            ctx.drawImage(img, 0, 0, w, h);
+            resolve(canvas.toDataURL('image/jpeg', quality));
+          };
+          img.src = reader.result;
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    // base64 data URI 的近似字节数（去掉 data:…;base64, 前缀后按 3/4 折算）
+    function dataUrlBytes(s) {
+      if (!s) return 0;
+      const str = String(s);
+      const i = str.indexOf(',');
+      return Math.round((i >= 0 ? str.slice(i + 1) : str).length * 0.75);
+    }
+
+    // 压缩到「不超过 limitBytes」为止：先按 maxW/quality 压一次，
+    // 还超就逐级降尺寸 + 降质量重压（最多 4 轮）。
+    // 起因：首页 6 张广告图的 base64 曾撑到 700KB+，保存请求被网关拒收 → 上传后报错。
+    async function compressToLimit(file, maxW, quality, limitBytes) {
+      let w = maxW, q = quality;
+      let out = await compressImage(file, w, q);
+      for (let n = 0; n < 4 && dataUrlBytes(out) > limitBytes; n++) {
+        w = Math.max(360, Math.round(w * 0.72));
+        q = Math.max(0.5, +(q - 0.1).toFixed(2));
+        out = await compressImage(file, w, q);
+      }
+      return out;
+    }
+
+    // 保存类报错翻译成人话：以前只丢一句原始英文，看不出是哪一步出问题
+    function saveFailMsg(err, what) {
+      const s = String(err || '');
+      const low = s.toLowerCase();
+      const pre = '保存' + (what || '') + '失败：';
+      if (!s) return pre + '未知错误（按 F12 打开 Console 有完整记录）';
+      if (/413|too large|payload|entity|request size|body size/i.test(low))
+        return pre + '内容太大被网关拒收（多半是图片太大）。请重新上传一次图片——系统会自动压缩到安全体积。';
+      if (/timeout|timed out|deadline/i.test(low))
+        return pre + '请求超时（图片较大时常见），已自动重试无效。请再点一次保存。';
+      if (/failed to fetch|network|err_network|net::/i.test(low))
+        return pre + '网络中断或请求没发出去。请检查网络后重试。';
+      if (/permission denied|row-level security/i.test(low)) return pre + s;
+      return pre + s;
+    }
+
+    /* ---------- Tabs ---------- */
+    const tabs = {
+      dash:     { btn: 'tab-dash',      panel: 'panel-dash' },
+      products: { btn: 'tab-products',  panel: 'panel-products' },
+      orders:   { btn: 'tab-orders',    panel: 'panel-orders' },
+      marketing:{ btn: 'tab-marketing', panel: 'panel-marketing' },
+      customers:{ btn: 'tab-customers', panel: 'panel-customers' },
+      inventory:{ btn: 'tab-inventory', panel: 'panel-inventory' },
+      reviews:  { btn: 'tab-reviews',   panel: 'panel-reviews' },
+      shipping: { btn: 'tab-shipping',  panel: 'panel-shipping' },
+      home:     { btn: 'tab-home',     panel: 'panel-home' },
+      cats:     { btn: 'tab-cats',     panel: 'panel-cats' },
+      admins:   { btn: 'tab-admins',   panel: 'panel-admins' }
+    };
+    // 渲染兜底 2：Promise 拒绝不会走 showRenderError（那是同步 try/catch），
+    // 必须全局监听 unhandledrejection——否则板块就是静默白屏，主人截图也无从判断
+    window.addEventListener('unhandledrejection', function (e) {
+      try {
+        var msg = (e.reason && e.reason.message) ? e.reason.message : String(e.reason);
+        console.error('[admin] 异步渲染失败：', e.reason);
+        Object.keys(tabs).forEach(function (k) {
+          var el = document.getElementById(tabs[k].panel);
+          if (el && el.style.display !== 'none' && !el.textContent.trim()) {
+            var d = document.createElement('div');
+            d.className = 'note';
+            d.style.cssText = 'border-color:#e0b0b0;background:#fff5f5;margin-bottom:12px;white-space:pre-wrap';
+            d.textContent = '⚠ 该板块异步加载失败：' + msg + '\n请硬刷新（Ctrl+Shift+R）后重试；仍出现请把本条截图反馈。';
+            el.appendChild(d);
+          }
+        });
+      } catch (x) {}
+    });
+    // 渲染兜底：任一板块加载失败时，在面板内显示明确错误，而不是留一片空白
+    function showRenderError(name, err) {
+      console.error('[admin] 板块 ' + name + ' 渲染失败：', err);
+      const el = document.getElementById('panel-' + name);
+      if (!el) return;
+      const d = document.createElement('div');
+      d.className = 'note';
+      d.style.cssText = 'border-color:#e0b0b0;background:#fff5f5;margin-bottom:12px';
+      d.textContent = '⚠ 该板块加载失败：' + ((err && err.message) ? err.message : String(err)) + '。请刷新重试，或把这段提示截图反馈。';
+      el.insertBefore(d, el.firstChild);
+    }
+    function run(name, fn) {
+      try {
+        const r = fn();
+        if (r && typeof r.then === 'function') r.catch(e => showRenderError(name, e));
+      } catch (err) { showRenderError(name, err); }
+    }
+    function showTab(name) {
+      Object.entries(tabs).forEach(([k, t]) => {
+        document.getElementById(t.btn).classList.toggle('active', k === name);
+        document.getElementById(t.panel).style.display = (k === name) ? 'block' : 'none';
+      });
+      if (name === 'dash') run('dash', renderDashboard);
+      if (name === 'products') run('products', renderProducts);
+      if (name === 'orders') run('orders', () => renderOrders('all'));
+      if (name === 'marketing') run('marketing', renderMarketing);
+      if (name === 'customers') run('customers', renderCustomers);
+      if (name === 'inventory') run('inventory', renderInventory);
+      if (name === 'reviews') run('reviews', renderReviews);
+      if (name === 'shipping') run('shipping', renderShipping);
+      if (name === 'home') run('home', renderHome);
+      if (name === 'cats') run('cats', renderCats);
+      if (name === 'admins') run('admins', renderAdmins);
+    }
+    Object.entries(tabs).forEach(([k, t]) => document.getElementById(t.btn).onclick = () => showTab(k));
+
+    /* ============================================================
+     *  ADMINS（后台管理员名单，仅 owner 进入此 tab）
+     * ============================================================ */
+    function adminRowHtml(a, me) {
+      const isSelf = me && String(a.email).toLowerCase() === String(me.email).toLowerCase();
+      const roleBadge = a.role === 'owner'
+        ? '<span class="tag" style="background:#fdecea;color:#b91c1c">owner</span>'
+        : '<span class="tag" style="background:#eef4ff;color:#1d4ed8">admin</span>';
+      const state = a.active
+        ? '<span style="color:#2e8b57">启用中</span>'
+        : '<span style="color:#9ca3af">已停用</span>';
+      const created = (a.created_at || '').slice(0, 10);
+      return `<tr>
+        <td>${String(a.email || '')}</td>
+        <td>${String(a.name || '') || '<span class="muted">—</span>'}</td>
+        <td>${roleBadge}${isSelf ? ' <span class="muted" style="font-size:12px">（当前登录）</span>' : ''}</td>
+        <td>${state}</td>
+        <td class="muted" style="font-size:12px">${created}</td>
+        <td style="white-space:nowrap">
+          <button class="btn small" data-ad-toggle="${a.id}" data-active="${a.active ? 0 : 1}">${a.active ? '停用' : '启用'}</button>
+          <button class="btn small ghost" data-ad-del="${a.id}" ${isSelf ? 'disabled title="不能移除自己"' : ''}>移除</button>
+        </td>
+      </tr>`;
+    }
+    async function renderAdmins() {
+      const box = document.getElementById('admin-list');
+      const r = await window.Data.getAdmins();
+      if (!r.ok) {
+        box.innerHTML = '<div class="note red">名单读取失败：' + (r.error || '未知错误') + '。若刚登录可刷新重试。</div>';
+        return;
+      }
+      const rows = r.rows || [];
+      box.innerHTML = rows.length
+        ? '<table class="tbl"><thead><tr><th>邮箱</th><th>备注名</th><th>角色</th><th>状态</th><th>添加日期</th><th>操作</th></tr></thead><tbody>'
+          + rows.map(a => adminRowHtml(a, ME)).join('') + '</tbody></table>'
+        : '<div class="note">名单为空（异常：至少应有一位 owner）。</div>';
+      box.querySelectorAll('[data-ad-toggle]').forEach(btn => {
+        btn.onclick = async () => {
+          const id = btn.getAttribute('data-ad-toggle');
+          const active = btn.getAttribute('data-active') === '1';
+          btn.disabled = true;
+          const rr = await window.Data.setAdminActive(id, active);
+          if (!rr.ok) { window.Layout.toast('操作失败：' + (rr.error || '')); btn.disabled = false; return; }
+          window.Layout.toast(active ? '已启用' : '已停用');
+          renderAdmins();
+        };
+      });
+      box.querySelectorAll('[data-ad-del]').forEach(btn => {
+        btn.onclick = async () => {
+          const id = btn.getAttribute('data-ad-del');
+          if (!confirm('确认移除该管理员？对方将立即失去后台登录权限。')) return;
+          btn.disabled = true;
+          const rr = await window.Data.deleteAdmin(id);
+          if (!rr.ok) { window.Layout.toast('移除失败：' + (rr.error || '')); btn.disabled = false; return; }
+          window.Layout.toast('已移除');
+          renderAdmins();
+        };
+      });
+    }
+    document.getElementById('ad-add').onclick = async () => {
+      const email = (document.getElementById('ad-email').value || '').trim();
+      const name = (document.getElementById('ad-name').value || '').trim();
+      const role = document.getElementById('ad-role').value;
+      if (!email) { window.Layout.toast('请先填邮箱'); return; }
+      const btn = document.getElementById('ad-add');
+      btn.disabled = true; btn.textContent = '添加中…';
+      const r = await window.Data.addAdmin({ email, name, role });
+      btn.disabled = false; btn.textContent = '+ 添加管理员';
+      if (!r.ok) { window.Layout.toast('添加失败：' + (r.error || '')); return; }
+      document.getElementById('ad-email').value = '';
+      document.getElementById('ad-name').value = '';
+      window.Layout.toast('已添加 ' + email + '（对方用该邮箱在后台登录页收验证码即可进入）');
+      renderAdmins();
+    };
+
+    /* ---------- CSV export helpers ---------- */
+    function csvCell(v){ if(v==null) return ''; const s=String(v); return /[",\n]/.test(s)? '"'+s.replace(/"/g,'""')+'"' : s; }
+    function toCSV(rows){ return rows.map(r=>r.map(csvCell).join(',')).join('\n'); }
+    function downloadCSV(name, content){
+      const blob=new Blob(['\ufeff'+content],{type:'text/csv;charset=utf-8'});
+      const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click();
+      setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+    }
+
+    /* ============================================================
+     *  DASHBOARD
+     * ============================================================ */
+    let charts = {};
+    async function renderDashboard() {
+      const [orders, products, discounts, pv, reqs] = await Promise.all([window.Data.getAllOrders(), window.Data.getProductsList(), window.Data.getDiscounts(), window.Data.getPageViews(30), window.Data.getReturnRequests().catch(()=>[])]);
+      // 口径（2026-10-22 梳理）：已支付=paid/shipped/delivered；pending 未付款不进营收/客单价/待发货；
+      // 净营收 = 已支付合计 − 已退款；待发货 = 已付款未发货；待审核售后 = 售后申请中 requested 数
+      const paidish = (orders || []).filter(o => o.status === 'paid' || o.status === 'shipped' || o.status === 'delivered');
+      const gmv = paidish.reduce((s, o) => s + (+o.total || 0), 0);
+      const refunded = (orders || []).filter(o => o.status === 'refunded');
+      const refundAmt = refunded.reduce((s,o)=> s + (+o.refund_amount || 0), 0);
+      const revenue = Math.max(0, gmv - refundAmt);
+      const pendingShip = paidish.filter(o => o.status === 'paid').length;
+      const openReqs = (reqs || []).filter(r => r.status === 'requested');
+      const taxTotal = paidish.reduce((s,o)=> s + (+o.tax || 0), 0);
+      const avg = paidish.length ? gmv / paidish.length : 0;
+      const customers = window.Data.getCustomers(orders);
+
+      document.getElementById('kpi').innerHTML = `
+        <div class="kpi"><div class="kpi-v">${window.Money(revenue)}</div><div class="kpi-l">营收（净额）</div></div>
+        <div class="kpi"><div class="kpi-v">${(orders||[]).length}</div><div class="kpi-l">订单总数</div></div>
+        <div class="kpi"><div class="kpi-v" style="color:#d9442b">${pendingShip}</div><div class="kpi-l">待发货</div></div>
+        <div class="kpi"><div class="kpi-v" style="${openReqs.length?'color:#d9442b':''}">${openReqs.length}</div><div class="kpi-l">待审核售后</div></div>
+        <div class="kpi"><div class="kpi-v">${window.Money(avg)}</div><div class="kpi-l">客单价</div></div>
+        <div class="kpi"><div class="kpi-v">${(products||[]).length}</div><div class="kpi-l">在售商品</div></div>
+        <div class="kpi"><div class="kpi-v">${(customers||[]).length}</div><div class="kpi-l">顾客数</div></div>
+        <div class="kpi"><div class="kpi-v">${window.Money(taxTotal)}</div><div class="kpi-l">已收税费</div></div>
+        <div class="kpi"><div class="kpi-v" style="color:#b8860b">${window.Money(refundAmt)}</div><div class="kpi-l">已退款</div></div>`;
+
+      // revenue last 14 days
+      const days = [], revByDay = {};
+      const now = new Date();
+      for (let i = 13; i >= 0; i--) {
+        const d = new Date(now); d.setDate(now.getDate() - i);
+        const key = d.toISOString().slice(0,10);
+        days.push(key.slice(5)); revByDay[key] = 0;
+      }
+      (paidish||[]).forEach(o => {
+        const k = (o.created_at||'').slice(0,10);
+        if (k in revByDay) revByDay[k] += (+o.total || 0);
+      });
+      drawLine('chart-revenue', days, Object.values(revByDay));
+
+      const statCount = {};
+      (orders||[]).forEach(o => { const s = o.status || 'pending'; statCount[s] = (statCount[s]||0)+1; });
+      const labels = Object.keys(STATUS_LABEL);
+      drawDoughnut('chart-status', labels.map(s => STATUS_LABEL[s]), labels.map(s => statCount[s]||0));
+
+      const top = {};
+      (orders||[]).forEach(o => (o.items||[]).forEach(it => { top[it.name] = (top[it.name]||0) + (+it.qty||0); }));
+      const topArr = Object.entries(top).sort((a,b)=>b[1]-a[1]).slice(0,8);
+      drawBar('chart-top', topArr.map(x=>x[0]), topArr.map(x=>x[1]));
+
+      try { renderAnalytics(pv); } catch (e) { console.error('analytics render failed', e); }
+    }
+
+    function drawLine(id, labels, data) {
+      if (!window.Chart) return;
+      charts[id] && charts[id].destroy();
+      charts[id] = new Chart(document.getElementById(id), {
+        type: 'line',
+        data: { labels, datasets: [{ label: 'Revenue', data, borderColor: '#d9442b', backgroundColor: 'rgba(217,68,43,.12)', fill: true, tension: .3 }] },
+        options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { callback: v => '$'+v } } } }
+      });
+    }
+    function drawDoughnut(id, labels, data) {
+      if (!window.Chart) return;
+      charts[id] && charts[id].destroy();
+      const colors = ['#d9442b','#2e8b57','#1f6feb','#e0a800','#8a8a8a','#a855f7'];
+      charts[id] = new Chart(document.getElementById(id), {
+        type: 'doughnut',
+        data: { labels, datasets: [{ data, backgroundColor: colors }] },
+        options: { plugins: { legend: { position: 'right' } } }
+      });
+    }
+    function drawBar(id, labels, data) {
+      if (!window.Chart) return;
+      charts[id] && charts[id].destroy();
+      charts[id] = new Chart(document.getElementById(id), {
+        type: 'bar',
+        data: { labels, datasets: [{ label: 'Units', data, backgroundColor: '#d9442b' }] },
+        options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+      });
+    }
+    function drawDualLine(id, labels, a, b) {
+      if (!window.Chart) return;
+      charts[id] && charts[id].destroy();
+      charts[id] = new Chart(document.getElementById(id), {
+        type: 'line',
+        data: { labels, datasets: [
+          { label: '浏览 PV', data: a, borderColor: '#d9442b', backgroundColor: 'rgba(217,68,43,.10)', fill: true, tension: .3 },
+          { label: '访客 UV', data: b, borderColor: '#1f6feb', backgroundColor: 'rgba(31,111,235,.08)', fill: true, tension: .3 }
+        ] },
+        options: { plugins: { legend: { position: 'top' } }, scales: { y: { beginAtZero: true } } }
+      });
+    }
+    function drawFunnel(id, labels, data) {
+      if (!window.Chart) return;
+      charts[id] && charts[id].destroy();
+      charts[id] = new Chart(document.getElementById(id), {
+        type: 'bar',
+        data: { labels, datasets: [{ label: '会话数', data, backgroundColor: ['#8a8a8a', '#e0a800', '#d9442b', '#2e8b57'] }] },
+        options: { indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true } } }
+      });
+    }
+
+    const ANA_SRC = { direct: '直接访问', organic: '自然搜索', referral: '外部引荐', campaign: '营销活动', internal: '站内' };
+    const ANA_DEV = { mobile: '移动端', tablet: '平板', desktop: '桌面' };
+
+    // 访客归属地：ISO 国家码 → 中文名（未列出的码原样显示）
+    const ANA_COUNTRY = {
+      US: '美国', CA: '加拿大', MX: '墨西哥', GB: '英国', IE: '爱尔兰', DE: '德国', FR: '法国', IT: '意大利',
+      ES: '西班牙', PT: '葡萄牙', NL: '荷兰', BE: '比利时', CH: '瑞士', AT: '奥地利', SE: '瑞典', NO: '挪威',
+      FI: '芬兰', DK: '丹麦', PL: '波兰', GR: '希腊', RU: '俄罗斯', UA: '乌克兰', TR: '土耳其', IL: '以色列',
+      AE: '阿联酋', SA: '沙特阿拉伯', QA: '卡塔尔', KW: '科威特', IN: '印度', PK: '巴基斯坦',
+      CN: '中国', TW: '中国台湾', HK: '中国香港', MO: '中国澳门', JP: '日本', KR: '韩国', SG: '新加坡',
+      MY: '马来西亚', TH: '泰国', VN: '越南', PH: '菲律宾', ID: '印度尼西亚', AU: '澳大利亚', NZ: '新西兰',
+      ZA: '南非', EG: '埃及', NG: '尼日利亚', KE: '肯尼亚', BR: '巴西', AR: '阿根廷', CL: '智利',
+      CO: '哥伦比亚', PE: '秘鲁'
+    };
+    // 美国州/区码 → 中文名（region 字段，仅国家为美国时有值）
+    const ANA_REGION_US = {
+      AL: '亚拉巴马', AK: '阿拉斯加', AZ: '亚利桑那', AR: '阿肯色', CA: '加利福尼亚', CO: '科罗拉多',
+      CT: '康涅狄格', DE: '特拉华', FL: '佛罗里达', GA: '佐治亚', HI: '夏威夷', ID: '爱达荷', IL: '伊利诺伊',
+      IN: '印第安纳', IA: '艾奥瓦', KS: '堪萨斯', KY: '肯塔基', LA: '路易斯安那', ME: '缅因', MD: '马里兰',
+      MA: '马萨诸塞', MI: '密歇根', MN: '明尼苏达', MS: '密西西比', MO: '密苏里', MT: '蒙大拿',
+      NE: '内布拉斯加', NV: '内华达', NH: '新罕布什尔', NJ: '新泽西', NM: '新墨西哥', NY: '纽约',
+      NC: '北卡罗来纳', ND: '北达科他', OH: '俄亥俄', OK: '俄克拉何马', OR: '俄勒冈', PA: '宾夕法尼亚',
+      RI: '罗得岛', SC: '南卡罗来纳', SD: '南达科他', TN: '田纳西', TX: '得克萨斯', UT: '犹他',
+      VT: '佛蒙特', VA: '弗吉尼亚', WA: '华盛顿', WV: '西弗吉尼亚', WI: '威斯康星', WY: '怀俄明',
+      DC: '华盛顿特区'
+    };
+    // 美国州/区全名（大写）→ 中文名。Worker 注入的是 cf.region（Cloudflare 边缘给的州全名，
+    // 如 CALIFORNIA），与上面的两位码表并存；查找时先两位码后全名，两种数据都能显示中文。
+    const ANA_REGION_FULL = {
+      ALABAMA: '亚拉巴马', ALASKA: '阿拉斯加', ARIZONA: '亚利桑那', ARKANSAS: '阿肯色',
+      CALIFORNIA: '加利福尼亚', COLORADO: '科罗拉多', CONNECTICUT: '康涅狄格', DELAWARE: '特拉华',
+      FLORIDA: '佛罗里达', GEORGIA: '佐治亚', HAWAII: '夏威夷', IDAHO: '爱达荷', ILLINOIS: '伊利诺伊',
+      INDIANA: '印第安纳', IOWA: '艾奥瓦', KANSAS: '堪萨斯', KENTUCKY: '肯塔基', LOUISIANA: '路易斯安那',
+      MAINE: '缅因', MARYLAND: '马里兰', MASSACHUSETTS: '马萨诸塞', MICHIGAN: '密歇根', MINNESOTA: '明尼苏达',
+      MISSISSIPPI: '密西西比', MISSOURI: '密苏里', MONTANA: '蒙大拿', NEBRASKA: '内布拉斯加',
+      NEVADA: '内华达', 'NEW HAMPSHIRE': '新罕布什尔', 'NEW JERSEY': '新泽西', 'NEW MEXICO': '新墨西哥',
+      'NEW YORK': '纽约', 'NORTH CAROLINA': '北卡罗来纳', 'NORTH DAKOTA': '北达科他', OHIO: '俄亥俄',
+      OKLAHOMA: '俄克拉何马', OREGON: '俄勒根', PENNSYLVANIA: '宾夕法尼亚', 'RHODE ISLAND': '罗得岛',
+      'SOUTH CAROLINA': '南卡罗来纳', 'SOUTH DAKOTA': '南达科他', TENNESSEE: '田纳西', TEXAS: '得克萨斯',
+      UTAH: '犹他', VERMONT: '佛蒙特', VIRGINIA: '弗吉尼亚', WASHINGTON: '华盛顿',
+      'WEST VIRGINIA': '西弗吉尼亚', WISCONSIN: '威斯康星', WYOMING: '怀俄明',
+      'DISTRICT OF COLUMBIA': '华盛顿特区'
+    };
+    // 空数据提示：显示文案并藏起画布，避免出现空白图表
+    const chartHint = (id, show) => {
+      const h = document.getElementById('hint-' + id);
+      const c = document.getElementById('chart-' + id);
+      if (h) h.style.display = show ? 'block' : 'none';
+      if (c) c.style.display = show ? 'none' : '';
+    };
+
+    // —— 网站浏览（page_views 聚合，见 assets/js/analytics.js 埋点）——
+    function renderAnalytics(views) {
+      views = views || [];
+      const box = document.getElementById('ana-kpi');
+      if (!views.length) {
+        box.innerHTML = '<p class="muted" style="grid-column:1/-1">还没有浏览数据。顾客打开前台页面即自动埋点入库，过一会儿再进来看看。</p>';
+        return;
+      }
+      const now = new Date();
+      const dayKey = (d) => d.toISOString().slice(0, 10);
+      const todayKey = dayKey(now);
+
+      const todays = views.filter(v => (v.created_at || '').slice(0, 10) === todayKey);
+      const todayPV = todays.filter(v => v.event === 'pageview').length;
+      const todayUV = new Set(todays.map(v => v.session_id)).size;
+
+      const allSess = new Set(views.map(v => v.session_id));
+      const d7 = new Date(now); d7.setDate(now.getDate() - 6);
+      const uv7 = new Set(views.filter(v => (v.created_at || '').slice(0, 10) >= dayKey(d7)).map(v => v.session_id)).size;
+
+      // 新/老客：按会话去重取首条 new_visitor（埋点已保证同会话一致）
+      const sessNV = {};
+      views.forEach(v => { if (!(v.session_id in sessNV)) sessNV[v.session_id] = !!v.new_visitor; });
+      const newPct = allSess.size ? Math.round(Object.values(sessNV).filter(Boolean).length / allSess.size * 100) : 0;
+
+      // 漏斗：按会话命中过哪些事件
+      const sessEv = {};
+      views.forEach(v => { (sessEv[v.session_id] = sessEv[v.session_id] || new Set()).add(v.event); });
+      const nSess = allSess.size;
+      const nProduct = Object.values(sessEv).filter(s => s.has('product_view')).length;
+      const nCart = Object.values(sessEv).filter(s => s.has('add_to_cart')).length;
+      const nCheckout = Object.values(sessEv).filter(s => s.has('begin_checkout')).length;
+      const pct = (n) => nSess ? Math.round(n / nSess * 100) + '%' : '0%';
+
+      box.innerHTML = `
+        <div class="kpi"><div class="kpi-v">${todayPV}</div><div class="kpi-l">今日浏览 PV</div></div>
+        <div class="kpi"><div class="kpi-v">${todayUV}</div><div class="kpi-l">今日访客 UV</div></div>
+        <div class="kpi"><div class="kpi-v">${uv7}</div><div class="kpi-l">近 7 天访客</div></div>
+        <div class="kpi"><div class="kpi-v">${newPct}%</div><div class="kpi-l">新访客占比</div></div>
+        <div class="kpi"><div class="kpi-v">${pct(nCart)}</div><div class="kpi-l">加购率</div></div>
+        <div class="kpi"><div class="kpi-v">${pct(nCheckout)}</div><div class="kpi-l">结账率</div></div>`;
+
+      // 近 14 天 PV & UV
+      const days = [], pvBy = {}, sessBy = {};
+      for (let i = 13; i >= 0; i--) { const d = new Date(now); d.setDate(now.getDate() - i); const k = dayKey(d); days.push(k.slice(5)); pvBy[k] = 0; sessBy[k] = {}; }
+      views.forEach(v => { const k = (v.created_at || '').slice(0, 10); if (k in pvBy && v.event === 'pageview') { pvBy[k]++; sessBy[k][v.session_id] = 1; } });
+      drawDualLine('chart-ana-trend', days, Object.values(pvBy), Object.keys(sessBy).map(k => Object.keys(sessBy[k]).length));
+
+      // 来源 / 设备（按 pageview）
+      const pv = views.filter(v => v.event === 'pageview');
+      const src = {}, dev = {};
+      pv.forEach(v => { const s = v.source_kind || 'direct'; src[s] = (src[s] || 0) + 1; const d = v.device || 'desktop'; dev[d] = (dev[d] || 0) + 1; });
+      const sK = Object.keys(ANA_SRC).filter(k => src[k]);
+      drawDoughnut('chart-ana-source', sK.map(k => ANA_SRC[k]), sK.map(k => src[k]));
+      const dK = Object.keys(ANA_DEV).filter(k => dev[k]);
+      drawDoughnut('chart-ana-device', dK.map(k => ANA_DEV[k]), dK.map(k => dev[k]));
+
+      // 转化漏斗（按会话）
+      drawFunnel('chart-ana-funnel',
+        ['访问会话', '看商品', '加购', '进结账'],
+        [nSess, nProduct, nCart, nCheckout]);
+
+      // 访客归属地 + 来源链接明细：统一按「访客（会话）」去重
+      // —— 同一个人刷 N 个页面只计 1（否则活跃国家被高估）；
+      //    每个会话取最早一条 pageview（= 入口页）：geo/utm 会话内稳定，
+      //    referrer 取入口页才是真正的「从哪来」（站内后续跳转的 referrer 是自己，不能算）
+      const pvAsc = pv.slice().sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
+      const entry = {};
+      pvAsc.forEach(v => { if (!entry[v.session_id]) entry[v.session_id] = v; });
+      const entries = Object.values(entry);
+
+      // 访客归属地：国家/地区 Top + 美国州/区 Top（Worker 新版注入，见 deploy/cloudflare-worker.js）
+      // region 归一：Worker 注入 cf.region 州全名，早期数据/兜底可能是两位码或 slice 截断形，
+      // 聚合前统一归一到全名，避免同一个州裂成两个柱（NY 与 NEW YORK）
+      const REGION_NORM = {};
+      Object.keys(ANA_REGION_FULL).forEach(f => { REGION_NORM[f] = f; });
+      Object.keys(ANA_REGION_US).forEach(code => {
+        const full = Object.keys(ANA_REGION_FULL).find(f => ANA_REGION_FULL[f] === ANA_REGION_US[code]);
+        if (full) REGION_NORM[code] = full;
+      });
+      const normRegion = k => {
+        if (REGION_NORM[k]) return REGION_NORM[k];
+        const hit = Object.keys(ANA_REGION_FULL).find(f => f.startsWith(k) || k.startsWith(f));
+        return hit || k;
+      };
+      const ctry = {}, regUS = {};
+      entries.forEach(v => {
+        const c = String(v.country || '').toUpperCase();
+        if (!c) return;
+        ctry[c] = (ctry[c] || 0) + 1;
+        if (c === 'US' && v.region) {
+          const r = normRegion(String(v.region).toUpperCase());
+          regUS[r] = (regUS[r] || 0) + 1;
+        }
+      });
+      const cArr = Object.entries(ctry).sort((a, b) => b[1] - a[1]).slice(0, 8);
+      chartHint('ana-country', !cArr.length);
+      if (cArr.length) drawBar('chart-ana-country', cArr.map(x => ANA_COUNTRY[x[0]] || x[0]), cArr.map(x => x[1]));
+      const rArr = Object.entries(regUS).sort((a, b) => b[1] - a[1]).slice(0, 8);
+      chartHint('ana-region', !rArr.length);
+      if (rArr.length) drawBar('chart-ana-region', rArr.map(x => ANA_REGION_FULL[x[0]] || x[0]), rArr.map(x => x[1]));
+
+      // 来源链接明细：外部引荐域名 Top + UTM 活动拆解（域名已去 www、统一小写）
+      const ref = {}, utm = {};
+      entries.forEach(v => {
+        const h = String(v.referrer_host || '').toLowerCase().replace(/^www\./, '');
+        if (h && v.source_kind !== 'internal') ref[h] = (ref[h] || 0) + 1;
+        const s = String(v.utm_source || '').trim();
+        if (s) {
+          const c = String(v.utm_campaign || '').trim();
+          const m = String(v.utm_medium || '').trim();
+          const label = s + (c ? ' · ' + c : (m ? ' · ' + m : ''));
+          utm[label] = (utm[label] || 0) + 1;
+        }
+      });
+      const refArr = Object.entries(ref).sort((a, b) => b[1] - a[1]).slice(0, 8);
+      chartHint('ana-referrer', !refArr.length);
+      if (refArr.length) drawBar('chart-ana-referrer', refArr.map(x => x[0]), refArr.map(x => x[1]));
+      const utmArr = Object.entries(utm).sort((a, b) => b[1] - a[1]).slice(0, 8);
+      chartHint('ana-utm', !utmArr.length);
+      if (utmArr.length) drawBar('chart-ana-utm', utmArr.map(x => x[0]), utmArr.map(x => x[1]));
+
+      // 热门页面（商品页按 slug 细分）/ 热门商品（按 product_view）
+      const pages = {}, prods = {};
+      pv.forEach(v => { let k = v.path || '/'; if (/product\.html/.test(k) && v.product_slug) k = '商品页 · ' + v.product_slug; pages[k] = (pages[k] || 0) + 1; });
+      views.forEach(v => { if (v.event === 'product_view' && v.product_slug) prods[v.product_slug] = (prods[v.product_slug] || 0) + 1; });
+      const pgArr = Object.entries(pages).sort((a, b) => b[1] - a[1]).slice(0, 8);
+      drawBar('chart-ana-pages', pgArr.map(x => x[0]), pgArr.map(x => x[1]));
+      const prArr = Object.entries(prods).sort((a, b) => b[1] - a[1]).slice(0, 8);
+      drawBar('chart-ana-products', prArr.map(x => x[0]), prArr.map(x => x[1]));
+    }
+
+    // 导出
+    document.getElementById('exp-orders').onclick = async () => {
+      const orders = await window.Data.getAllOrders();
+      const rows = [['单号','日期','邮箱','商品','规格','小计','折扣','运费','税费','合计','退款','状态','物流单号',
+                     '收件人','地址','城市','州','邮编','电话','收款方式','支付单号']];
+      (orders||[]).forEach(o => rows.push([
+        String(o.id).slice(0,8), o.created_at||'', o.email||'',
+        (o.items||[]).map(i=>i.qty+'x '+i.name).join('; '),
+        (o.items||[]).map(i=>i.variant_label||'').join('; '),
+        o.subtotal, o.discount_amount||0, o.shipping, o.tax||0, o.total, o.refund_amount||0, o.status, o.tracking_no||'',
+        o.ship_name||'', o.ship_addr||'', o.ship_city||'', o.ship_state||'', o.ship_zip||'', o.phone||'',
+        o.payment_provider||'', o.payment_ref||''
+      ]));
+      downloadCSV('uslatiao-orders.csv', toCSV(rows));
+      window.Layout.toast('订单已导出');
+    };
+    document.getElementById('exp-products').onclick = async () => {
+      const products = await window.Data.getProductsList();
+      const rows = [['标识','商品名','分类','价格','划线原价','库存','销量基数','辣度','状态']];
+      (products||[]).forEach(p => rows.push([p.slug, p.name, p.category, p.price, p.compare_at||'', p.stock!=null?p.stock:'', p.sold_count!=null?p.sold_count:0, p.heat||0, p.status||'active']));
+      downloadCSV('uslatiao-products.csv', toCSV(rows));
+      window.Layout.toast('商品已导出');
+    };
+
+    /* ============================================================
+     *  PRODUCTS
+     * ============================================================ */
+    const listEl = document.getElementById('product-list');
+    const formEl = document.getElementById('product-form');
+    let products = [];
+    // 商品图片状态：main=产品图（第一张为主图），detail=详情图
+    let imgState = { main: [], detail: [] };
+
+    // 打开表单前，把该商品已有图片读进 imgState（兼容旧的单个 image 字段）
+    function setImgState(p) {
+      imgState = p
+        ? {
+            main: (p.images && p.images.length) ? p.images.slice() : (p.image ? [p.image] : []),
+            detail: (p.detail_images || []).slice()
+          }
+        : { main: [], detail: [] };
+    }
+
+    // 图片上传分区（支持多张）
+    function imgZone(kind, label, arr, tip) {
+      return `
+        <div class="field">
+          <label>${label}</label>
+          <div class="img-grid" id="f-${kind}-grid">
+            ${arr.length ? arr.map((src, i) => `<div class="img-cell"><img src="${src}" alt="">${kind === 'main' && i === 0 ? '<span class="img-main-tag">主图</span>' : ''}<button type="button" class="img-del" data-i="${i}">×</button></div>`).join('') : '<span class="muted">暂无图片</span>'}
+          </div>
+          <input type="file" id="f-${kind}-file" accept="image/*" multiple hidden>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+            <button type="button" class="btn small" id="f-${kind}-add">添加图片</button>
+            <button type="button" class="btn ghost small" id="f-${kind}-clear" ${arr.length ? '' : 'hidden'}>清空</button>
+          </div>
+          <div class="muted" style="font-size:12px;margin-top:6px">${tip}</div>
+        </div>`;
+    }
+
+    function productForm(p) {
+      p = p || { name:'', subtitle:'', price:'', compare_at:'', category:'spicy-strips', heat:0, tags:'', badge:'', bullets:'', taste:'', how_hot:'', ingredients:'', image:'', status:'active', stock:200, sold_count:0 };
+      const cats = (CAT_LIST.length ? CAT_LIST : window.Shop.getCategories(false));
+      if (!CAT_LIST.length) CAT_LIST = cats;
+      const catOpts = cats.map(c => `<option value="${c.key}" ${c.key===p.category?'selected':''}>${catCn(c.key)} · ${c.label_en||c.key}${c.enabled===false?'（停用）':''}</option>`).join('');
+      return `
+        <h3 style="margin:0 0 12px">${p.slug ? '编辑商品 · ' + p.slug : '新增商品'}</h3>
+        <div class="field"><label>商品标题</label><input id="f-name" value="${p.name||''}" placeholder="例如：Mala Strips — Original"></div>
+        <div class="field"><label>副标题</label><input id="f-sub" value="${p.subtitle||''}"></div>
+        <div class="field"><label>SKU（库存编码，用于对账 / 发货）</label><input id="f-sku" value="${p.sku||''}" placeholder="例如 MALA-ORIG-10CT，可留空"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="field"><label>价格（美元）</label><input id="f-price" type="number" step="0.01" value="${p.price||''}"></div>
+          <div class="field"><label>划线原价（可选）</label><input id="f-compare" type="number" step="0.01" value="${p.compare_at||''}"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px">
+          <div class="field"><label>分类</label><select id="f-cat">${catOpts}</select></div>
+          <div class="field"><label>辣度（0–5）</label><input id="f-heat" type="number" min="0" max="5" value="${p.heat||0}"></div>
+          <div class="field"><label>库存（件）</label><input id="f-stock" type="number" min="0" value="${p.stock!=null?p.stock:0}"></div>
+          <div class="field"><label>状态</label><select id="f-status"><option value="active" ${p.status!=='inactive'&&p.status!=='draft'?'selected':''}>上架</option><option value="draft" ${p.status==='draft'?'selected':''}>草稿（不对顾客显示）</option><option value="inactive" ${p.status==='inactive'?'selected':''}>下架隐藏</option></select></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 2fr;gap:12px;align-items:end">
+          <div class="field"><label>销量基数（件）</label><input id="f-sold" type="number" min="0" value="${p.sold_count!=null?p.sold_count:0}"></div>
+          <div class="muted" style="font-size:12px;padding-bottom:6px">前台「已售」= 这里填的基数 + 真实订单量。新品期设一个起点数字（如 100–300）让页面不难看；真实订单会往上累加。填 0 则前台不显示销量。</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px">
+          <div class="field"><label>商品重量</label>
+            <div style="display:flex;gap:6px">
+              <input id="f-weight" type="number" step="0.01" min="0" value="${p.weight_oz!=null?p.weight_oz:0}" style="flex:1">
+              <select id="f-weight-unit" style="width:82px"><option value="oz">oz 盎司</option><option value="lb">磅 lb</option></select>
+            </div>
+          </div>
+          <div class="field"><label>外包装长（in）</label><input id="f-len" type="number" step="0.01" min="0" value="${p.length_in!=null?p.length_in:0}"></div>
+          <div class="field"><label>外包装宽（in）</label><input id="f-wid" type="number" step="0.01" min="0" value="${p.width_in!=null?p.width_in:0}"></div>
+          <div class="field"><label>外包装高（in）</label><input id="f-hgt" type="number" step="0.01" min="0" value="${p.height_in!=null?p.height_in:0}"></div>
+        </div>
+        <div class="muted" style="font-size:12px;margin:-4px 0 12px">美国物流惯例：重量可填 <strong>oz（盎司）或磅 lb</strong>（1 lb = 16 oz，选磅会自动换算）、尺寸 in 英寸。重量用于「按重量计费」的运费计算。</div>
+        <div class="field"><label>角标（如 BEST SELLER）</label><input id="f-badge" value="${p.badge||''}"></div>
+        <div class="field"><label>标签（英文逗号分隔）</label><input id="f-tags" value="${(p.tags||[]).join(', ')}"></div>
+        <div class="field"><label>卖点（每行一条）</label><textarea id="f-bullets" rows="4">${(p.bullets||[]).join('\n')}</textarea></div>
+        <div class="field"><label>口感描述</label><textarea id="f-taste" rows="3">${p.taste||''}</textarea></div>
+        <div class="field"><label>辣度说明（可选）</label><textarea id="f-how" rows="2">${p.how_hot||''}</textarea></div>
+        <div class="field"><label>成分与过敏原</label><textarea id="f-ing" rows="2">${p.ingredients||''}</textarea></div>
+        ${imgZone('main', '产品图（主图 / 列表缩略图）', imgState.main, '可多选，缩略图可拖动调整顺序，第一张作为商品卡与列表主图。自动压缩至最宽 1000px。')}
+        ${imgZone('detail', '详情图（商品详情页展示）', imgState.detail, '可多选，缩略图可拖动调整顺序，全部展示在商品详情页。自动压缩至最宽 1000px。')}
+        <div class="field" style="margin-top:8px">
+          <label>商品规格 / 变体（每个规格独立 SKU、价格、库存）</label>
+          <div style="display:flex;gap:10px;align-items:center;margin:6px 0 4px">
+            <span style="font-size:13px;color:#555;white-space:nowrap">规格维度名：</span>
+            <input id="f-optname" placeholder="如 Flavor / 口味 / Pack / 颜色（前台显示为 Flavor: xxx）" value="${esc(p.option_name || '')}" style="flex:1;padding:6px 8px;border:1px solid var(--line);border-radius:8px;font-size:13px">
+          </div>
+          <div class="vrow vhead" style="margin-top:4px"><span>规格名</span><span>SKU</span><span>价格 ($)</span><span>划线价 ($)</span><span>重量</span><span>单位</span><span>库存</span><span>规格图（选中切主图）</span><span></span></div>
+          <div id="f-variants"></div>
+          <button type="button" class="btn ghost small" id="f-add-variant">+ 添加规格</button>
+          <div class="muted" style="font-size:12px;margin-top:6px">「规格名」是顾客看到的选项文字（如 Heiya Flavor / 2 Pack），务必填写；SKU 仅用于内部对账。点「上传」给每个规格配一张图，顾客选中该规格时主图会切换。</div>
+        </div>
+        <div style="display:flex;gap:10px">
+          <button class="btn red small" id="f-save">保存</button>
+          <button class="btn ghost small" id="f-cancel">取消</button>
+        </div>`;
+    }
+    function readForm(slug) {
+      const v = id => document.getElementById(id).value.trim();
+      const num = id => { const x = parseFloat(v(id)); return isNaN(x) ? 0 : x; };
+      return {
+        slug: slug || slugify(v('f-name')) || ('item-'+Date.now()),
+        name: v('f-name'), subtitle: v('f-sub'),
+        price: num('f-price'), compare_at: v('f-compare') ? num('f-compare') : null,
+        category: v('f-cat'), heat: Math.max(0, Math.min(5, parseInt(v('f-heat'))||0)),
+        stock: Math.max(0, parseInt(v('f-stock'))||0),
+        sold_count: Math.max(0, parseInt(v('f-sold'))||0),
+        weight_oz: num('f-weight') * (v('f-weight-unit') === 'lb' ? 16 : 1), length_in: num('f-len'), width_in: num('f-wid'), height_in: num('f-hgt'),
+        tags: v('f-tags') ? v('f-tags').split(',').map(s=>s.trim()).filter(Boolean) : [],
+        badge: v('f-badge'), bullets: v('f-bullets') ? v('f-bullets').split('\n').map(s=>s.trim()).filter(Boolean) : [],
+        taste: v('f-taste'), how_hot: v('f-how'), ingredients: v('f-ing'),
+        images: imgState.main.slice(), detail_images: imgState.detail.slice(),
+        image: imgState.main[0] || '',
+        sku: v('f-sku'),
+        option_name: v('f-optname'),
+        variants: (() => {
+          const rows = Array.from(document.querySelectorAll('#f-variants .vrow'));
+          const out = rows.map(r => {
+            const sku = r.querySelector('.v-sku').value.trim();
+            const label = r.querySelector('.v-label').value.trim();
+            if (!sku && !label) return null;
+            const cmp = r.querySelector('.v-compare').value.trim();
+            const num = s => { const x = parseFloat(s); return isNaN(x) ? 0 : x; };
+            return {
+              sku, option_label: label,
+              price: num(r.querySelector('.v-price').value),
+              compare_at: cmp ? num(cmp) : null,
+              weight_oz: num(r.querySelector('.v-weight').value) * (r.querySelector('.v-weight-unit') && r.querySelector('.v-weight-unit').value === 'lb' ? 16 : 1),
+              stock: Math.max(0, parseInt(r.querySelector('.v-stock').value) || 0),
+              image: r.querySelector('.v-img').value.trim()
+            };
+          }).filter(Boolean);
+          return out;
+        })(),
+        status: v('f-status')
+      };
+    }
+    function bindForm(slug) {
+      document.getElementById('f-cancel').onclick = () => { formEl.style.display='none'; formEl.innerHTML=''; };
+
+      // —— 商品规格 / 变体：动态增删行 ——
+      const variantsBox = document.getElementById('f-variants');
+      // 统一的变体行 HTML（含规格图上传 UI，与产品图用同一套 compressImage）
+      function variantRowHTML(v) {
+        v = v || {};
+        const img = v.image || '';
+        return `
+          <div class="vrow">
+            <input class="v-label" placeholder="规格名（如 Heiya Flavor）" value="${esc(v.option_label || '')}">
+            <input class="v-sku" placeholder="SKU" value="${esc(v.sku || '')}">
+            <input class="v-price" type="number" step="0.01" placeholder="价格" value="${v.price != null ? v.price : ''}">
+            <input class="v-compare" type="number" step="0.01" placeholder="划线价" value="${v.compare_at != null ? v.compare_at : ''}">
+            <input class="v-weight" type="number" step="0.01" min="0" placeholder="重量" value="${v.weight_oz != null ? v.weight_oz : ''}">
+            <select class="v-weight-unit" title="重量单位"><option value="oz">oz</option><option value="lb">磅 lb</option></select>
+            <input class="v-stock" type="number" placeholder="库存" value="${v.stock != null ? v.stock : 0}">
+            <div class="v-img-cell">
+              <img class="v-img-prev" src="${img ? esc(img) : ''}" ${img ? '' : 'style="display:none"'}>
+              <input class="v-img" type="hidden" value="${esc(img)}">
+              <input type="file" class="v-img-file" accept="image/*" hidden>
+              <div style="display:flex;gap:4px;margin-top:2px">
+                <button type="button" class="btn ghost small v-img-add">上传</button>
+                <button type="button" class="btn ghost small v-img-del" ${img ? '' : 'hidden'}>×</button>
+              </div>
+            </div>
+            <button type="button" class="v-del btn ghost small" title="删除">×</button>
+          </div>`;
+      }
+      function renderVariants(list) {
+        variantsBox.innerHTML = (list || []).map(variantRowHTML).join('');
+      }
+      const initVariants = ((slug && typeof products !== 'undefined' && products.find(x => x.slug === slug)) || {}).variants || [];
+      renderVariants(initVariants);
+      const addVarBtn = document.getElementById('f-add-variant');
+      if (addVarBtn) addVarBtn.onclick = () => {
+        const row = document.createElement('div');
+        row.innerHTML = variantRowHTML();
+        variantsBox.appendChild(row.firstElementChild);
+      };
+      // 事件委托：规格图上传 / 删除（与产品图同一套压缩上传）
+      variantsBox.addEventListener('click', e => {
+        const row = e.target.closest('.vrow');
+        if (!row) return;
+        if (e.target.classList.contains('v-img-add')) {
+          row.querySelector('.v-img-file').click();
+        } else if (e.target.classList.contains('v-img-del')) {
+          row.querySelector('.v-img').value = '';
+          const prev = row.querySelector('.v-img-prev');
+          prev.src = ''; prev.style.display = 'none';
+          e.target.hidden = true;
+        } else if (e.target.classList.contains('v-del')) {
+          row.remove();
+        }
+      });
+      variantsBox.addEventListener('change', async e => {
+        if (!e.target.classList || !e.target.classList.contains('v-img-file')) return;
+        const row = e.target.closest('.vrow');
+        const files = Array.from(e.target.files || []);
+        if (!files.length) return;
+        const btn = row.querySelector('.v-img-add');
+        btn.textContent = '处理中…';
+        try {
+          const dataUrl = await compressToLimit(files[0], 1000, 0.82, 220 * 1024);
+          const u = await window.Data.uploadMedia(dataUrl, 'product');
+          row.querySelector('.v-img').value = u;
+          const prev = row.querySelector('.v-img-prev');
+          prev.src = u; prev.style.display = '';
+          row.querySelector('.v-img-del').hidden = false;
+          window.Layout.toast('规格图已加入，保存商品后生效');
+        } catch (err) {
+          window.Layout.toast('图片处理失败：' + (err && err.message ? err.message : err));
+        } finally {
+          btn.textContent = '上传';
+          e.target.value = '';
+        }
+      });
+
+      // —— 图片上传：产品图 / 详情图，均支持多张；缩略图可拖动调整顺序 ——
+      function renderImgGrid(kind) {
+        const grid = document.getElementById('f-' + kind + '-grid');
+        if (!grid) return;
+        const arr = imgState[kind];
+        grid.innerHTML = arr.length
+          ? arr.map((src, i) => `<div class="img-cell" draggable="true" data-idx="${i}"><img src="${src}" alt="">${kind === 'main' && i === 0 ? '<span class="img-main-tag">主图</span>' : ''}<button type="button" class="img-del" data-i="${i}">×</button></div>`).join('')
+          : '<span class="muted">暂无图片</span>';
+        grid.querySelectorAll('.img-del').forEach(b => b.onclick = () => {
+          imgState[kind].splice(parseInt(b.dataset.i), 1);
+          renderImgGrid(kind);
+          const cb = document.getElementById('f-' + kind + '-clear');
+          if (cb) cb.hidden = !imgState[kind].length;
+        });
+        // 拖动排序：拖到目标位置松手即交换顺序（第一张为主图，拖动可换主图）
+        let dragIdx = null;
+        grid.querySelectorAll('.img-cell').forEach(cell => {
+          cell.addEventListener('dragstart', () => { dragIdx = parseInt(cell.dataset.idx, 10); cell.classList.add('dragging'); });
+          cell.addEventListener('dragend', () => { cell.classList.remove('dragging'); dragIdx = null; });
+          cell.addEventListener('dragover', e => e.preventDefault());
+          cell.addEventListener('drop', e => {
+            e.preventDefault();
+            const to = parseInt(cell.dataset.idx, 10);
+            if (dragIdx == null || isNaN(to) || dragIdx === to) return;
+            const moved = imgState[kind].splice(dragIdx, 1)[0];
+            imgState[kind].splice(to, 0, moved);
+            renderImgGrid(kind);
+            window.Layout.toast('顺序已调整，保存商品后生效');
+          });
+        });
+      }
+      ['main', 'detail'].forEach(kind => {
+        const fileIn = document.getElementById('f-' + kind + '-file');
+        const addBtn = document.getElementById('f-' + kind + '-add');
+        const clearBtn = document.getElementById('f-' + kind + '-clear');
+        if (addBtn) addBtn.onclick = () => fileIn && fileIn.click();
+        if (fileIn) fileIn.onchange = async () => {
+          const files = Array.from(fileIn.files || []);
+          if (!files.length) return;
+          addBtn.textContent = '处理中…';
+          try {
+            for (const f of files) {
+              const dataUrl = await compressToLimit(f, 1000, 0.82, 220 * 1024);
+              const u = await window.Data.uploadMedia(dataUrl, 'product');
+              imgState[kind].push(u);
+            }
+            renderImgGrid(kind);
+            if (clearBtn) clearBtn.hidden = false;
+            window.Layout.toast('图片已加入，保存商品后生效');
+          } catch (e) {
+            window.Layout.toast('图片处理失败：' + (e && e.message ? e.message : e));
+          } finally {
+            addBtn.textContent = '添加图片';
+            fileIn.value = '';
+          }
+        };
+        if (clearBtn) clearBtn.onclick = () => {
+          imgState[kind] = [];
+          renderImgGrid(kind);
+          clearBtn.hidden = true;
+        };
+        renderImgGrid(kind);
+      });
+
+      document.getElementById('f-save').onclick = () => withSaving(document.getElementById('f-save'), async () => {
+        const prod = readForm(slug);
+        const { ok, error } = await window.Data.saveProduct(prod);
+        if (!ok) { window.Layout.toast('保存失败：' + (error||'')); return; }
+        window.Layout.toast(slug ? '已更新' : '已上架');
+        formEl.style.display='none'; formEl.innerHTML='';
+        await renderProducts();
+      });
+    }
+    async function renderProducts() {
+      products = await window.Data.getProductsList();
+      listEl.innerHTML = `<table class="admin"><thead><tr><th>图片</th><th>标题</th><th>分类</th><th>价格</th><th>辣度</th><th>库存</th><th>销量</th><th>状态</th><th></th></tr></thead><tbody>` +
+        (products||[]).map(p => {
+          const st = p.stock!=null?p.stock:0;
+          const stockTag = st<=0 ? `<span class="tag tag-off">缺货</span>` : st<=10 ? `<span class="tag" style="background:#fdf6e3;color:#b8860b;border-color:#f0e0a8">${st} 偏低</span>` : st;
+          const thumb = p.image || '';
+          return `<tr><td>${thumb ? `<img class="admin-thumb" src="${thumb}" alt="">` : '<span class="muted">—</span>'}</td>
+          <td><strong>${p.name}</strong><br><span class="muted" style="font-size:12px">${p.slug} · ${(+p.weight_oz||0)} oz · ${(+p.length_in||0)}×${(+p.width_in||0)}×${(+p.height_in||0)} in${p.sku?(' · SKU: '+p.sku):''}${p.variants&&p.variants.length?(' · '+p.variants.length+' 规格'):''}</span></td>
+          <td>${catCn(p.category)}</td><td>${window.Money(p.price)}</td><td>${p.heat||0}/5</td>
+          <td>${stockTag}</td>
+          <td>${(+p.sold_count||0)>0 ? (+p.sold_count) + ' <span class="muted" style="font-size:11px">+真实单</span>' : '<span class="muted">—</span>'}</td>
+          <td>${p.status==='draft'
+              ? '<span class="tag" style="background:#fff7e6;color:#b45309">草稿</span>'
+              : (p.status==='inactive'
+                ? '<span class="tag tag-off">已下架</span>'
+                : '<span class="tag">在售</span>')}</td>
+          <td style="white-space:nowrap"><button class="btn small" data-edit="${p.slug}">编辑</button>
+          <button class="btn small" data-toggle="${p.slug}">${p.status==='active'?'下架':'上架'}</button>
+          <button class="btn ghost small" data-del="${p.slug}">删除</button></td></tr>`;
+        }).join('') +
+        `</tbody></table>`;
+      listEl.querySelectorAll('[data-edit]').forEach(b => b.onclick = async () => {
+        const full = await window.Data.getProductBySlug(b.dataset.edit);
+        if (!full) { window.Layout.toast('读取商品失败'); return; }
+        setImgState(full);
+        await reloadCats(); // 确保读到最新分类（含本次会话新增的）
+        formEl.style.display='block'; formEl.innerHTML = productForm(full); bindForm(full.slug); formEl.scrollIntoView({behavior:'smooth'});
+      });
+      listEl.querySelectorAll('[data-toggle]').forEach(b => b.onclick = async () => {
+        const cur = products.find(x=>x.slug===b.dataset.toggle);
+        // 三态切换：在售 ↔ 非在售（draft/inactive 都视为未上架，点一下即上架）
+        const newStatus = (cur && cur.status==='active') ? 'inactive' : 'active';
+        const r = await window.Data.patchProduct(b.dataset.toggle, { status: newStatus });
+        if (!r.ok) { window.Layout.toast('更新失败：' + (r.error||'')); return; }
+        window.Layout.toast('已更新'); await renderProducts();
+      });
+      listEl.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
+        if (!confirm('确认删除商品「' + b.dataset.del + '」？')) return;
+        await window.Data.deleteProduct(b.dataset.del); window.Layout.toast('已删除'); await renderProducts();
+      });
+    }
+    document.getElementById('add-product').onclick = async () => {
+      setImgState(null);
+      await reloadCats(); // 确保读到最新分类（含本次会话新增的）
+      formEl.style.display='block'; formEl.innerHTML = productForm(null); bindForm(null); formEl.scrollIntoView({behavior:'smooth'});
+    };
+    document.getElementById('seed').onclick = async () => {
+      if (!confirm('确认把 8 个示例商品载入目录？')) return;
+      const { ok, error } = await window.Data.seedFromJson();
+      if (!ok) { window.Layout.toast('载入失败：' + (error||'')); return; }
+      window.Layout.toast('示例数据已载入'); await renderProducts();
+    };
+
+    /* ---------- 批量导入（表格 → 草稿） ---------- */
+    function parseCSV(text) {
+      const rows = [];
+      let row = [], field = '', inQ = false;
+      for (let i = 0; i < text.length; i++) {
+        const c = text[i];
+        if (inQ) {
+          if (c === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else inQ = false; }
+          else field += c;
+        } else if (c === '"') inQ = true;
+        else if (c === ',') { row.push(field); field = ''; }
+        else if (c === '\n' || c === '\r') {
+          if (c === '\r' && text[i + 1] === '\n') i++;
+          row.push(field); field = '';
+          if (row.some(x => String(x).trim() !== '')) rows.push(row);
+          row = [];
+        } else field += c;
+      }
+      if (field !== '' || row.length) { row.push(field); if (row.some(x => String(x).trim() !== '')) rows.push(row); }
+      if (!rows.length) return [];
+      const head = rows[0].map(h => String(h).trim());
+      return rows.slice(1).map(r => {
+        const o = {};
+        head.forEach((h, i) => { o[h] = String(r[i] != null ? r[i] : '').trim(); });
+        return o;
+      });
+    }
+    let pendingImport = null;
+    document.getElementById('imp-product').onclick = () => {
+      const box = document.getElementById('product-import');
+      box.style.display = box.style.display === 'none' ? 'block' : 'none';
+    };
+    document.getElementById('imp-file').onchange = (e) => {
+      const f = e.target.files && e.target.files[0];
+      if (!f) return;
+      const rd = new FileReader();
+      rd.onload = () => { document.getElementById('imp-text').value = String(rd.result || ''); };
+      rd.readAsText(f);
+    };
+    document.getElementById('imp-parse').onclick = () => {
+      const text = (document.getElementById('imp-text').value || '').trim();
+      const msg = document.getElementById('imp-msg');
+      const prev = document.getElementById('imp-preview');
+      const runBtn = document.getElementById('imp-run');
+      if (!text) { msg.textContent = '请先粘贴内容或选择文件'; return; }
+      let rows = null;
+      try {
+        const j = JSON.parse(text);
+        if (Array.isArray(j)) rows = j;
+        else if (j && Array.isArray(j.products)) rows = j.products;
+      } catch (e) {}
+      if (!rows) rows = parseCSV(text);
+      if (!rows.length) { msg.textContent = '没解析到数据行'; prev.innerHTML = ''; runBtn.style.display = 'none'; return; }
+      pendingImport = rows;
+      const norm = rows.map(r => { try { return { row: r, p: window.Data.normalizeImportRow(r) }; } catch (e) { return { row: r, err: String(e && e.message || e) }; } });
+      prev.innerHTML = '<table class="tbl"><thead><tr><th>商品名</th><th>slug</th><th>类目</th><th>价格</th><th>辣度</th><th>落库状态</th></tr></thead><tbody>'
+        + norm.map(x => x.err
+          ? '<tr><td colspan="6" style="color:#b91c1c">解析失败：' + x.err + '</td></tr>'
+          : '<tr><td>' + (x.p.name || '<span style="color:#b91c1c">缺商品名</span>') + '</td><td class="muted">' + x.p.slug + '</td><td>' + x.p.category + '</td><td>' + window.Money(x.p.price) + '</td><td>' + x.p.heat + '/5</td><td><span class="tag" style="background:#fff7e6;color:#b45309">草稿</span></td></tr>').join('')
+        + '</tbody></table>';
+      msg.textContent = '解析到 ' + norm.length + ' 行，确认后全部以草稿导入';
+      runBtn.style.display = '';
+    };
+    document.getElementById('imp-run').onclick = async () => {
+      if (!pendingImport) return;
+      const btn = document.getElementById('imp-run');
+      btn.disabled = true; btn.textContent = '导入中…';
+      const r = await window.Data.importProducts(pendingImport);
+      btn.disabled = false; btn.textContent = '确认导入';
+      const msg = document.getElementById('imp-msg');
+      if (!r.ok && !r.inserted) { msg.textContent = '导入失败：' + (r.error || JSON.stringify(r.failed)); return; }
+      msg.textContent = '已导入 ' + r.inserted + ' 件草稿'
+        + (r.duplicates && r.duplicates.length ? '（表内重复跳过：' + r.duplicates.join(', ') + '）' : '')
+        + (r.failed && r.failed.length ? '；失败 ' + r.failed.length + ' 件：' + r.failed.map(f => f.slug).join(', ') : '');
+      pendingImport = null;
+      document.getElementById('imp-run').style.display = 'none';
+      await renderProducts();
+    };
+
+    /* ============================================================
+     *  ORDERS & SHIPPING
+     * ============================================================ */
+    const orderFiltersEl = document.getElementById('order-filters');
+    const orderListEl = document.getElementById('order-list');
+    async function renderOrders(filter) {
+      const [orders, reqs] = await Promise.all([window.Data.getAllOrders(), window.Data.getReturnRequests().catch(()=>[])]);
+      const f = filter || 'all';
+      const counts = {}; (orders||[]).forEach(o => { const s=o.status||'pending'; counts[s]=(counts[s]||0)+1; });
+      const openReqs = (reqs||[]).filter(r => r.status === 'requested');
+      const reqByOrder = {}; (reqs||[]).forEach(r => { if (!reqByOrder[r.order_id]) reqByOrder[r.order_id] = r; });
+      const tabsDef = [['all','全部'],['requests','售后申请'],['pending','待处理'],['paid','已付款'],['shipped','已发货'],['delivered','已送达'],['refunded','已退款'],['cancelled','已取消']];
+      orderFiltersEl.innerHTML = tabsDef.map(([k,lab]) => `<button class="filter-btn ${f===k?'active':''}" data-f="${k}">${lab} <span class="badge" ${k==='requests'&&openReqs.length?'style="background:#d9442b;color:#fff"':''}>${k==='requests'?openReqs.length:(counts[k]||0)}</span></button>`).join('');
+      orderFiltersEl.querySelectorAll('[data-f]').forEach(b => b.onclick = () => renderOrders(b.dataset.f));
+
+      /* —— 售后申请审核页 —— */
+      if (f === 'requests') {
+        const byId = {}; (orders||[]).forEach(o => { byId[o.id] = o; });
+        if (!(reqs||[]).length) {
+          orderListEl.innerHTML = '<p class="muted">暂无售后申请。顾客在「账户 → My orders」对已付款未发货订单点 Cancel order 后，申请会出现在这里。</p>';
+          return;
+        }
+        const THREE_H = 3 * 3600 * 1000;
+        const RR_LABEL = { requested: '<span class="tag" style="background:#fdf3e3;color:#b5762a">待审核</span>', approved: '<span class="tag" style="background:#e8f5ec;color:#2e8b57">已通过</span>', rejected: '<span class="tag" style="background:#fdecec;color:#d9442b">已拒绝</span>' };
+        orderListEl.innerHTML = `<table class="admin"><thead><tr><th>申请</th><th>订单</th><th>顾客</th><th>原因</th><th>申请时间</th><th>状态</th><th></th></tr></thead><tbody>` +
+          (reqs||[]).map(r => {
+            const o = byId[r.order_id];
+            const d = r.created_at ? new Date(r.created_at).toLocaleString() : '';
+            const t0 = o && o.created_at ? new Date(o.created_at).getTime() : 0;
+            const within3h = t0 && (new Date(r.created_at).getTime() - t0) <= THREE_H;
+            const badge = within3h ? ` <span class="tag" style="background:#e8f5ec;color:#2e8b57">≤3h 优先处理</span>` : '';
+            let actions = '';
+            if (r.status === 'requested') {
+              actions = `<button class="btn small" data-approve="${r.id}">同意退款</button> <button class="btn ghost small" data-reject="${r.id}">拒绝</button>`;
+            }
+            const orderCell = o
+              ? `${String(o.id).slice(0,8)} · ${window.Money(o.total)}<div class="muted" style="font-size:12px">${STATUS_LABEL[o.status]||o.status}${(o.status==='shipped'||o.status==='delivered')?' · <span style="color:#d9442b">⚠ 该单已发货</span>':''}</div>`
+              : `<span style="color:#d9442b">⚠ 找不到对应订单</span>`;
+            const reason = (r.reason||'').replace(/</g,'&lt;');
+            return `<tr><td>${String(r.id).slice(0,8)}</td><td>${orderCell}</td><td>${r.email||''}</td><td style="max-width:220px">${reason||'<span class="muted">未填写</span>'}</td><td>${d}${badge}</td><td>${RR_LABEL[r.status]||r.status}</td><td style="white-space:nowrap">${actions}</td></tr>`;
+          }).join('') + `</tbody></table>`;
+
+        orderListEl.querySelectorAll('[data-approve]').forEach(b => b.onclick = async () => {
+          const r = (reqs||[]).filter(x => x.id === b.dataset.approve)[0];
+          if (!r) return;
+          const o = byId[r.order_id];
+          const amt = prompt('同意退款：输入退款金额（美元，默认全额）。提醒：实际退钱需在 Stripe 后台操作，此处为记账。', o ? String(+o.total || 0) : '');
+          if (amt === null) return;
+          if (o && (o.status === 'shipped' || o.status === 'delivered') && !confirm('该订单已发货，确认仍要退款？')) return;
+          const res = await window.Data.refundOrder(r.order_id, parseFloat(amt) || 0);
+          if (!res.ok) { window.Layout.toast('操作失败：' + (res.error || '')); return; }
+          await window.Data.updateReturnRequest(r.id, { status: 'approved' });
+          window.Layout.toast('已通过：订单标记为已退款');
+          renderOrders(f);
+        });
+        orderListEl.querySelectorAll('[data-reject]').forEach(b => b.onclick = async () => {
+          const r = (reqs||[]).filter(x => x.id === b.dataset.reject)[0];
+          if (!r || !confirm('拒绝该售后申请？顾客端将显示 Request declined。')) return;
+          await window.Data.updateReturnRequest(r.id, { status: 'rejected' });
+          window.Layout.toast('已拒绝');
+          renderOrders(f);
+        });
+        return;
+      }
+
+      const shown = (orders||[]).filter(o => f === 'all' || (o.status||'pending') === f);
+      if (!shown.length) { orderListEl.innerHTML = '<p class="muted">该状态下暂无订单。</p>'; return; }
+      orderListEl.innerHTML = `<table class="admin"><thead><tr><th>单号</th><th>日期</th><th>邮箱</th><th>商品 / 收货信息</th><th>小计</th><th>折扣</th><th>运费</th><th>税费</th><th>合计</th><th>状态</th><th></th></tr></thead><tbody>` +
+        shown.map(o => {
+          const items = (o.items||[]).map(i=>`${i.qty}× ${i.name}`).join(', ');
+          const d = o.created_at ? new Date(o.created_at).toLocaleString() : '';
+          const trk = o.tracking_no ? `<div class="muted" style="font-size:12px">${o.carrier||''} · ${o.tracking_no}${o.tracking_url?` · <a href="${o.tracking_url}" target="_blank">track</a>`:''}</div>` : '';
+          // 收货信息：没有它就没法发货，所以缺了必须显眼报警
+          const hasAddr = !!(o.ship_addr || o.ship_name);
+          const addr = hasAddr
+            ? `<div class="muted" style="font-size:12px;margin-top:6px;line-height:1.55;border-top:1px dashed #e3dccf;padding-top:5px">
+                 <strong style="color:#5a4a3a">${o.ship_name||''}</strong><br>
+                 ${o.ship_addr||''}<br>
+                 ${[o.ship_city, o.ship_state, o.ship_zip].filter(Boolean).join(', ')}
+                 ${o.phone?`<br>☎ ${o.phone}`:''}
+               </div>`
+            : `<div style="font-size:12px;margin-top:6px;color:#d9442b">⚠ 无收货地址${o.status==='paid'?'（已付款，务必联系顾客）':''}</div>`;
+          const pay = o.payment_status === 'paid' || (o.payment_provider === 'stripe' && o.paid_at)
+            ? `<span class="tag" style="background:#e8f5ec;color:#2e8b57">已收款</span>`
+            : (o.status === 'paid' ? `<span class="tag" style="background:#fdf3e3;color:#b5762a">手动标记</span>` : '');
+          let actions = '';
+          const st = o.status||'pending';
+          const rr = reqByOrder[o.id];
+          const rrTag = (rr && rr.status === 'requested' && (st === 'paid' || st === 'shipped')) ? `<span class="tag" style="background:#fdf3e3;color:#b5762a">售后申请中</span>` : '';
+          if (st === 'pending' || st === 'paid') actions += `<button class="btn small" data-ship="${o.id}">发货</button> `;
+          if (st === 'shipped') actions += `<button class="btn small" data-deliver="${o.id}">标记送达</button> `;
+          if (st === 'paid' || st === 'shipped') actions += `<button class="btn ghost small" data-refund="${o.id}">退款</button> `;
+          if (st !== 'cancelled' && st !== 'delivered' && st !== 'refunded') actions += `<button class="btn ghost small" data-cancel="${o.id}">取消订单</button> `;
+          if (st !== 'paid' && st !== 'shipped' && st !== 'delivered') actions += `<button class="btn small" data-pay="${o.id}">标记已付款</button> `;
+          return `<tr><td>${String(o.id).slice(0,8)}</td><td>${d}</td><td>${o.email||''}</td><td>${items}${addr}</td>
+            <td>${window.Money(o.subtotal)}</td><td>${o.discount_code?o.discount_code+' (-'+window.Money(o.discount_amount||0)+')':'—'}</td>
+            <td>${window.Money(o.shipping)}</td><td>${window.Money(o.tax||0)}</td>
+            <td>${window.Money(o.total)}${o.refund_amount?` <span class="muted" style="font-size:11px">(ref ${window.Money(o.refund_amount)})</span>`:''}</td>
+            <td><span class="tag">${STATUS_LABEL[st]||st}</span>${rrTag}${pay}${trk}</td>
+            <td style="white-space:nowrap">${actions}</td></tr>`;
+        }).join('') + `</tbody></table>`;
+
+      orderListEl.querySelectorAll('[data-ship]').forEach(b => b.onclick = () => shipOrder(b.dataset.ship));
+      orderListEl.querySelectorAll('[data-deliver]').forEach(b => b.onclick = async () => { await window.Data.updateOrder(b.dataset.deliver, { status:'delivered' }); window.Layout.toast('已标记送达'); renderOrders(f); });
+      orderListEl.querySelectorAll('[data-cancel]').forEach(b => b.onclick = async () => { if(!confirm('确认取消该订单？')) return; await window.Data.updateOrder(b.dataset.cancel, { status:'cancelled' }); window.Layout.toast('已取消'); renderOrders(f); });
+      orderListEl.querySelectorAll('[data-pay]').forEach(b => b.onclick = async () => { await window.Data.updateOrder(b.dataset.pay, { status:'paid' }); window.Layout.toast('已标记为已付款'); renderOrders(f); });
+      orderListEl.querySelectorAll('[data-refund]').forEach(b => b.onclick = async () => {
+        const amt = prompt('退款金额（美元）：', (b.dataset.refundAmt)||''); if (amt === null) return;
+        const { ok, error } = await window.Data.refundOrder(b.dataset.refund, parseFloat(amt)||0);
+        if (!ok) { window.Layout.toast('操作失败：' + (error||'')); return; }
+        window.Layout.toast('已退款'); renderOrders(f);
+      });
+    }
+    async function shipOrder(id) {
+      const no = prompt('物流单号：'); if (no === null) return;
+      const carrier = prompt('承运商（如 USPS、UPS、FedEx）：', 'USPS'); if (carrier === null) return;
+      const url = prompt('物流跟踪链接（可选）：', '');
+      const { ok, error } = await window.Data.updateOrder(id, { status:'shipped', tracking_no: no.trim(), carrier: (carrier||'').trim(), tracking_url: (url||'').trim(), shipped_at: new Date().toISOString() });
+      if (!ok) { window.Layout.toast('操作失败：' + (error||'')); return; }
+      window.Layout.toast('已发货'); renderOrders('all');
+    }
+
+    /* ============================================================
+     *  MARKETING (discount codes + ROI)
+     * ============================================================ */
+    const discountListEl = document.getElementById('discount-list');
+    const discountRoiEl = document.getElementById('discount-roi');
+    const discountFormEl = document.getElementById('discount-form');
+    let discounts = [];
+    const TYPE_LABEL = { percent: '百分比折扣', fixed: '固定金额减免', free_shipping: '免运费' };
+    const APPLY_LABEL = { code: '折扣码', auto: '自动折扣' };
+    function scopeLabel(d) {
+      if (!d || d.applies_to === 'all' || !d.applies_to) return '全场通用';
+      if (d.applies_to === 'category') return '分类：' + (catCn(d.target) || d.target || '');
+      return '商品：' + (d.target || '');
+    }
+
+    function discountForm(d) {
+      d = d || { code:'LATIAO10', apply_type:'code', type:'percent', value:10, min_order:0, active:true, starts_at:'', ends_at:'', usage_limit:'', per_customer_limit:'', first_order_only:false, applies_to:'all', target:'', description:'' };
+      const toLocal = s => s ? new Date(s).toISOString().slice(0,16) : '';
+      const curTarget = d.applies_to === 'category' ? ('cat:' + (d.target||''))
+        : d.applies_to === 'product' ? ('prd:' + (d.target||'')) : '';
+      const catOpts = CAT_LIST.map(c => `<option value="cat:${c.key}" ${curTarget === 'cat:'+c.key ? 'selected' : ''}>分类：${catCn(c.key)} · ${c.label_en||c.key}</option>`).join('');
+      const prdOpts = (products || [])
+        .map(p => `<option value="prd:${p.slug}" ${curTarget === 'prd:'+p.slug ? 'selected' : ''}>商品：${p.name}</option>`).join('');
+      return `
+        <h3 style="margin:0 0 12px">${d.code ? '编辑折扣 · ' + d.code : '新建折扣'}</h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="field"><label>折扣形式</label><select id="d-applyType">
+            <option value="code" ${(d.apply_type||'code')==='code'?'selected':''}>折扣码（顾客需输入）</option>
+            <option value="auto" ${d.apply_type==='auto'?'selected':''}>自动折扣（结账自动生效）</option></select></div>
+          <div class="field"><label>折扣码</label><input id="d-code" value="${d.code||''}" placeholder="LATIAO10"><div class="muted" style="font-size:11px">自动折扣时也用作标识，顾客无需输入</div></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="field"><label>优惠类型</label><select id="d-type">
+            <option value="percent" ${d.type==='percent'?'selected':''}>百分比折扣</option>
+            <option value="fixed" ${d.type==='fixed'?'selected':''}>固定金额减免</option>
+            <option value="free_shipping" ${d.type==='free_shipping'?'selected':''}>免运费</option></select></div>
+          <div class="field"><label>优惠值（%，$ 或免邮填 0）</label><input id="d-value" type="number" step="0.01" value="${d.value||0}"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="field"><label>最低消费（$，0 为不限）</label><input id="d-min" type="number" step="0.01" value="${d.min_order||0}"></div>
+          <div class="field"><label>适用范围</label><select id="d-target">
+            <option value="" ${!curTarget?'selected':''}>全场通用</option>${catOpts}${prdOpts}</select></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="field"><label>每人限用次数（0 为不限）</label><input id="d-per" type="number" min="0" value="${d.per_customer_limit||0}"></div>
+          <div class="field"><label>新客专享（仅限首单）</label><select id="d-first"><option value="false" ${d.first_order_only?'':'selected'}>否</option><option value="true" ${d.first_order_only?'selected':''}>是</option></select></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="field"><label>开始时间（可选）</label><input id="d-start" type="datetime-local" value="${toLocal(d.starts_at)}"></div>
+          <div class="field"><label>结束时间（可选）</label><input id="d-end" type="datetime-local" value="${toLocal(d.ends_at)}"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="field"><label>总用量上限（可选）</label><input id="d-limit" type="number" value="${d.usage_limit||''}"></div>
+          <div class="field"><label>启用</label><select id="d-active"><option value="true" ${d.active!==false?'selected':''}>启用</option><option value="false" ${d.active===false?'selected':''}>停用（暂停）</option></select></div>
+        </div>
+        <div class="field"><label>备注（内部可见）</label><input id="d-desc" value="${d.description||''}"></div>
+        <div style="display:flex;gap:10px">
+          <button class="btn red small" id="d-save">保存</button>
+          <button class="btn ghost small" id="d-cancel">取消</button>
+        </div>`;
+    }
+    function readDiscount(code) {
+      const v = id => document.getElementById(id).value.trim();
+      const num = id => { const x = parseFloat(v(id)); return isNaN(x) ? 0 : x; };
+      const tv = v('d-target');
+      return {
+        code: (v('d-code')||'').toUpperCase(),
+        apply_type: v('d-applyType') || 'code',
+        type: v('d-type'),
+        value: num('d-value'),
+        min_order: num('d-min'),
+        applies_to: tv.startsWith('cat:') ? 'category' : tv.startsWith('prd:') ? 'product' : 'all',
+        target: tv ? tv.slice(4) : null,
+        per_customer_limit: Math.max(0, parseInt(v('d-per')) || 0),
+        first_order_only: v('d-first') === 'true',
+        starts_at: v('d-start') ? new Date(v('d-start')).toISOString() : null,
+        ends_at: v('d-end') ? new Date(v('d-end')).toISOString() : null,
+        usage_limit: v('d-limit') ? parseInt(v('d-limit')) : null,
+        active: v('d-active') === 'true',
+        description: v('d-desc')
+      };
+    }
+    function bindDiscountForm(code) {
+      document.getElementById('d-cancel').onclick = () => { discountFormEl.style.display='none'; discountFormEl.innerHTML=''; };
+      document.getElementById('d-save').onclick = () => withSaving(document.getElementById('d-save'), async () => {
+        const d = readDiscount(code);
+        if (!d.code) { window.Layout.toast('请填写折扣码'); return; }
+        const { ok, error } = await window.Data.saveDiscount(d);
+        if (!ok) { window.Layout.toast('保存失败：' + (error||'')); return; }
+        window.Layout.toast('已保存'); discountFormEl.style.display='none'; discountFormEl.innerHTML='';
+        await renderDiscounts();
+      });
+    }
+    async function renderDiscounts() {
+      discounts = await window.Data.getDiscounts();
+      discountListEl.innerHTML = `<table class="admin"><thead><tr><th>折扣码</th><th>形式</th><th>类型</th><th>优惠值</th><th>适用范围</th><th>门槛</th><th>每人限用</th><th>已用 / 上限</th><th>新客</th><th>启用</th><th>有效期</th><th></th></tr></thead><tbody>` +
+        (discounts||[]).map(d => {
+          const val = d.type==='percent' ? d.value+'%' : d.type==='fixed' ? '$'+d.value : '免运费';
+          const valid = (d.starts_at?new Date(d.starts_at).toLocaleDateString():'') + (d.ends_at?' → '+new Date(d.ends_at).toLocaleDateString():'');
+          return `<tr><td><strong>${d.code}</strong></td><td>${APPLY_LABEL[d.apply_type||'code']||'折扣码'}</td><td>${TYPE_LABEL[d.type]||d.type}</td><td>${val}</td>
+            <td class="muted" style="font-size:12px">${scopeLabel(d)}</td><td>${d.min_order?'$'+d.min_order:'—'}</td>
+            <td>${d.per_customer_limit||'不限'}</td>
+            <td>${(d.usage_count||0)}${d.usage_limit?' / '+d.usage_limit:''}</td>
+            <td>${d.first_order_only?'是':'—'}</td>
+            <td><span class="tag ${d.active?'':'tag-off'}">${d.active?'启用':'停用'}</span></td>
+            <td class="muted" style="font-size:12px">${valid||'—'}</td>
+            <td style="white-space:nowrap"><button class="btn small" data-edit-d="${d.code}">编辑</button>
+            <button class="btn ghost small" data-del-d="${d.code}">删除</button></td></tr>`;
+        }).join('') + `</tbody></table>`;
+      discountListEl.querySelectorAll('[data-edit-d]').forEach(b => b.onclick = () => {
+        const d = discounts.find(x=>x.code===b.dataset.editD);
+        if (!d) return;
+        discountFormEl.style.display='block'; discountFormEl.innerHTML = discountForm(d); bindDiscountForm(d.code); discountFormEl.scrollIntoView({behavior:'smooth'});
+      });
+      discountListEl.querySelectorAll('[data-del-d]').forEach(b => b.onclick = async () => {
+        if (!confirm('确认删除折扣「' + b.dataset.delD + '」？')) return;
+        await window.Data.deleteDiscount(b.dataset.delD); window.Layout.toast('已删除'); await renderDiscounts();
+      });
+    }
+    async function renderMarketing() {
+      const [orders, discs, prods] = await Promise.all([window.Data.getAllOrders(), window.Data.getDiscounts(), window.Data.getProductsList()]);
+      discounts = discs;
+      if (prods && prods.length) products = prods; // 供「指定商品」下拉使用
+      const roi = window.Data.discountAnalytics(orders, discounts);
+      discountRoiEl.innerHTML = `<table class="admin"><thead><tr><th>折扣码</th><th>类型</th><th>使用次数</th><th>带来营收</th><th>优惠金额</th><th>平均客单</th></tr></thead><tbody>` +
+        (roi.length ? roi.map(r => `<tr><td><strong>${r.code}</strong></td><td>${TYPE_LABEL[r.type]||r.type}</td><td>${r.used}</td>
+          <td>${window.Money(r.revenue)}</td><td style="color:#2e8b57">−${window.Money(r.discount)}</td>
+          <td>${r.used?window.Money(r.revenue/r.used):'—'}</td></tr>`).join('') : `<tr><td colspan="6" class="muted">暂无折扣，先在上方新建一个。</td></tr>`) +
+        `</tbody></table>`;
+      await renderDiscounts();
+      await renderSubscribers();
+    }
+
+    /* ============================================================
+     *  邮件订阅者（注册入口收集）
+     * ============================================================ */
+    const SUB_SOURCE_LABEL = {
+      popup: '浏览中弹窗',
+      footer: '页脚订阅条',
+      post_purchase: '下单后邀请',
+      unknown: '未知'
+    };
+    const subscriberListEl = document.getElementById('subscriber-list');
+    async function renderSubscribers() {
+      if (!subscriberListEl) return;
+      let list = [];
+      try { list = (await window.Data.getSubscribers()) || []; } catch (e) { list = []; }
+      if (!list.length) {
+        subscriberListEl.innerHTML = '<p class="muted">还没有订阅者。访客在前台注册入口留邮箱后会出现在这里。</p>';
+        return;
+      }
+      const srcCount = {};
+      list.forEach(s => { const k = s.source || 'unknown'; srcCount[k] = (srcCount[k] || 0) + 1; });
+      const srcLine = Object.keys(srcCount).map(k =>
+        `${SUB_SOURCE_LABEL[k] || k} ${srcCount[k]}`).join(' · ');
+
+      subscriberListEl.innerHTML =
+        `<div class="muted" style="font-size:12px;margin-bottom:8px">共 <strong>${list.length}</strong> 位 · 来源分布：${srcLine}</div>` +
+        `<table class="admin"><thead><tr><th>邮箱</th><th>来源</th><th>页面</th><th>订阅时间</th><th></th></tr></thead><tbody>` +
+        list.map(s => {
+          const t = s.created_at ? new Date(s.created_at).toLocaleString() : '—';
+          return `<tr><td><strong>${s.email}</strong></td>
+            <td><span class="tag">${SUB_SOURCE_LABEL[s.source] || s.source || '未知'}</span></td>
+            <td class="muted" style="font-size:12px">${(s.source_meta || '—').replace(/^.*\//, '')}</td>
+            <td class="muted" style="font-size:12px">${t}</td>
+            <td style="white-space:nowrap"><button class="btn ghost small" data-del-sub="${s.email}">删除</button></td></tr>`;
+        }).join('') + `</tbody></table>`;
+
+      subscriberListEl.querySelectorAll('[data-del-sub]').forEach(b => b.onclick = async () => {
+        if (!confirm('确认把 ' + b.dataset.delSub + ' 从订阅名单移除？')) return;
+        await window.Data.deleteSubscriber(b.dataset.delSub);
+        window.Layout.toast('已移除');
+        await renderSubscribers();
+      });
+    }
+
+    // 导出订阅者 CSV
+    document.getElementById('exp-subs').onclick = async () => {
+      const list = (await window.Data.getSubscribers()) || [];
+      if (!list.length) { window.Layout.toast('还没有订阅者'); return; }
+      const head = 'email,source,source_meta,created_at';
+      const rows = list.map(s => [s.email, s.source, s.source_meta, s.created_at]
+        .map(x => '"' + String(x == null ? '' : x).replace(/"/g, '""') + '"').join(','));
+      const csv = '﻿' + head + '\n' + rows.join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'subscribers-' + new Date().toISOString().slice(0, 10) + '.csv';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      window.Layout.toast('已导出 ' + list.length + ' 位订阅者');
+    };
+    document.getElementById('add-discount').onclick = () => { discountFormEl.style.display='block'; discountFormEl.innerHTML = discountForm(null); bindDiscountForm(null); discountFormEl.scrollIntoView({behavior:'smooth'}); };
+
+    /* ============================================================
+     *  CUSTOMERS (CRM)
+     * ============================================================ */
+    const customerListEl = document.getElementById('customer-list');
+    function custTag(c) { if (c.spent >= 100) return { t:'高价值', cls:'' }; if (c.spent >= 30) return { t:'常客', cls:'tag green' }; return { t:'新客', cls:'tag-off' }; }
+    async function renderCustomers() {
+      const orders = await window.Data.getAllOrders();
+      const customers = window.Data.getCustomers(orders);
+      if (!customers.length) { customerListEl.innerHTML = '<p class="muted">暂无顾客数据。</p>'; return; }
+      customerListEl.innerHTML = `<table class="admin"><thead><tr><th>邮箱</th><th>订单数</th><th>商品件数</th><th>累计消费</th><th>平均客单</th><th>最近下单</th><th>分层</th></tr></thead><tbody>` +
+        customers.map(c => {
+          const seg = custTag(c);
+          const last = c.last ? new Date(c.last).toLocaleDateString() : '—';
+          return `<tr><td><strong>${c.email}</strong></td><td>${c.orders}</td><td>${c.items}</td>
+            <td>${window.Money(c.spent)}</td><td>${window.Money(c.orders?c.spent/c.orders:0)}</td>
+            <td class="muted" style="font-size:12px">${last}</td>
+            <td><span class="tag ${seg.cls}">${seg.t}</span></td></tr>`;
+        }).join('') + `</tbody></table>`;
+    }
+
+    /* ============================================================
+     *  INVENTORY
+     * ============================================================ */
+    const inventoryListEl = document.getElementById('inventory-list');
+    async function renderInventory() {
+      products = await window.Data.getProductsList();
+      inventoryListEl.innerHTML = `<table class="admin"><thead><tr><th>商品</th><th>分类</th><th>价格</th><th>重量</th><th>外包装尺寸</th><th>库存</th><th>状态</th><th></th></tr></thead><tbody>` +
+        (products||[]).map(p => {
+          const st = p.stock!=null?p.stock:0;
+          const stat = st<=0 ? `<span class="tag tag-off">缺货</span>` : st<=10 ? `<span class="tag" style="background:#fdf6e3;color:#b8860b;border-color:#f0e0a8">偏低（${st}）</span>` : `<span class="tag green">充足（${st}）</span>`;
+          const wt = (+p.weight_oz||0) ? `${(+p.weight_oz||0)} oz` : '<span class="muted">未填</span>';
+          const dim = ((+p.length_in||0)+(+p.width_in||0)+(+p.height_in||0)) ? `${(+p.length_in||0)}×${(+p.width_in||0)}×${(+p.height_in||0)} in` : '<span class="muted">未填</span>';
+          return `<tr><td><strong>${p.name}</strong></td><td>${catCn(p.category)}</td><td>${window.Money(p.price)}</td>
+            <td>${wt}</td><td>${dim}</td>
+            <td>${st}</td><td>${stat}</td>
+            <td style="white-space:nowrap"><button class="btn small" data-set="${p.slug}" data-cur="${st}">设置库存</button>
+            <button class="btn ghost small" data-inc="${p.slug}" data-cur="${st}">+10</button></td></tr>`;
+        }).join('') + `</tbody></table>`;
+      inventoryListEl.querySelectorAll('[data-set]').forEach(b => b.onclick = async () => {
+        const val = prompt('设置库存为：', b.dataset.cur); if (val === null) return;
+        const n = Math.max(0, parseInt(val)||0);
+        const r = await window.Data.patchProduct(b.dataset.set, { stock: n });
+        if (!r.ok) { window.Layout.toast('更新失败：' + (r.error||'')); return; }
+        window.Layout.toast('库存已更新'); await renderInventory();
+      });
+      inventoryListEl.querySelectorAll('[data-inc]').forEach(b => b.onclick = async () => {
+        const n = Math.max(0, (parseInt(b.dataset.cur)||0) + 10);
+        const r = await window.Data.patchProduct(b.dataset.inc, { stock: n });
+        if (!r.ok) { window.Layout.toast('更新失败：' + (r.error||'')); return; }
+        window.Layout.toast('库存已更新'); await renderInventory();
+      });
+    }
+
+    /* ============================================================
+     *  REVIEWS (approve / reject)
+     * ============================================================ */
+    const reviewListEl = document.getElementById('review-list');
+    async function renderReviews() {
+      const reviews = await window.Data.getReviews();
+      if (!reviews.length) { reviewListEl.innerHTML = '<p class="muted">暂无评价提交。</p>'; return; }
+      reviewListEl.innerHTML = `<table class="admin"><thead><tr><th>商品</th><th>评分</th><th>标题</th><th>内容</th><th>提交人</th><th>日期</th><th>状态</th><th></th></tr></thead><tbody>` +
+        reviews.map(r => {
+          const stars = '★'.repeat(r.rating||0) + '☆'.repeat(5-(r.rating||0));
+          const stat = r.status==='approved' ? `<span class="tag green">已通过</span>` : r.status==='rejected' ? `<span class="tag tag-off">已拒绝</span>` : `<span class="tag" style="background:#fdf6e3;color:#b8860b;border-color:#f0e0a8">待审核</span>`;
+          const acts = r.status!=='approved' ? `<button class="btn small" data-appr="${r.id}">通过</button> ` : '';
+          const acts2 = r.status!=='rejected' ? `<button class="btn ghost small" data-rej="${r.id}">拒绝</button> ` : '';
+          return `<tr><td>${r.product_slug}</td><td style="color:#e0a800;font-size:16px">${stars}</td>
+            <td><strong>${r.title||''}</strong></td><td class="muted" style="font-size:13px">${r.body||''}</td>
+            <td>${r.email||''}</td><td class="muted" style="font-size:12px">${r.created_at?new Date(r.created_at).toLocaleDateString():''}</td>
+            <td>${stat}</td><td style="white-space:nowrap">${acts}${acts2}<button class="btn ghost small" data-del-r="${r.id}">删除</button></td></tr>`;
+        }).join('') + `</tbody></table>`;
+      reviewListEl.querySelectorAll('[data-appr]').forEach(b => b.onclick = async () => { await window.Data.updateReview(b.dataset.appr, { status:'approved' }); window.Layout.toast('已通过'); await renderReviews(); });
+      reviewListEl.querySelectorAll('[data-rej]').forEach(b => b.onclick = async () => { await window.Data.updateReview(b.dataset.rej, { status:'rejected' }); window.Layout.toast('已拒绝'); await renderReviews(); });
+      reviewListEl.querySelectorAll('[data-del-r]').forEach(b => b.onclick = async () => { if(!confirm('确认删除该评价？')) return; await window.Data.deleteReview(b.dataset.delR); window.Layout.toast('已删除'); await renderReviews(); });
+    }
+
+    /* ============================================================
+     *  SHIPPING（物流 / 运费设置）
+     * ============================================================ */
+    const shipEl = document.getElementById('shipping-panel');
+    let shipCfg = null;
+    let shipSaved = null; // 数据库里「当前生效」的模板（面板上未保存的改动不算）
+    let shipTemplates = []; // 已保存的运费模板列表
+    const MODE_HINT = {
+      flat: '统一费率：所有订单收一样的运费，最简单。',
+      weight: '按重量分段：按「商品重量 × 数量」落在哪一档计费，最接近 USPS/UPS 实收。',
+      price: '按金额分段：按订单金额落在哪一档计费，常用于「买得越多运费越低」的促销。'
+    };
+    const MODE_TXT = { flat: '统一费率', weight: '按重量分段', price: '按订单金额分段' };
+
+    // 「当前生效模板」摘要卡：读自数据库已保存的设置，而不是面板上未保存的值
+    function savedTemplateCard(s) {
+      if (!s) return '';
+      let detail = '';
+      if (s.mode === 'flat') detail = `统一运费 $${(+s.flat_rate).toFixed(2)}`;
+      else if (s.mode === 'weight') detail = `${(s.weight_rates || []).length} 档重量费率`;
+      else detail = `${(s.price_rates || []).length} 档金额费率`;
+      const pack = s.include_packaging_weight ? `加收包装 ${(+(s.packaging_weight_oz || 0)).toFixed(2)} oz` : '不加收包装重量';
+      const when = s.updated_at ? new Date(s.updated_at).toLocaleString('zh-CN', { hour12: false }) : '';
+      const tplName = s.active_template ? `<br>使用模板：<strong>${esc(s.active_template)}</strong>` : '';
+      return `
+        <div class="note blue" style="margin-bottom:14px">
+          <strong>当前生效模板</strong>（已保存，线上结算正按这套跑${when ? '，保存于 ' + when : ''}）${tplName}<br>
+          计费方式：<strong>${MODE_TXT[s.mode] || s.mode}</strong>（${detail}）
+          ｜免邮：满 $${(+s.free_threshold || 0).toFixed(2)}
+          ｜${pack}
+          ${s.handling_fee > 0 ? `｜处理费 $${(+s.handling_fee).toFixed(2)}/单` : ''}
+          <br><span class="muted" style="font-size:12px">下面表单里的改动在点「保存物流设置」之前不会生效。</span>
+        </div>`;
+    }
+
+    async function renderShipping() {
+      shipCfg = await window.Data.getShippingSettings();
+      shipSaved = JSON.parse(JSON.stringify(shipCfg));
+      try { shipTemplates = await window.Data.getShippingTemplates() || []; } catch (e) { shipTemplates = []; }
+      drawShipping();
+    }
+    function drawShipping() {
+      shipEl.innerHTML = savedTemplateCard(shipSaved) + shipForm(shipCfg || window.Data.DEFAULT_SHIPPING);
+      bindShipping();
+    }
+
+    // 读取费率分段表（DOM → 数组）
+    function readRateRows(pfx) {
+      const rows = [];
+      document.querySelectorAll('[data-rate-row="' + pfx + '"]').forEach(tr => {
+        const upEl = tr.querySelector('[data-cell="up"]');
+        const rateEl = tr.querySelector('[data-cell="rate"]');
+        if (!upEl && !rateEl) return;
+        const up = parseFloat(upEl && upEl.value), rate = parseFloat(rateEl && rateEl.value);
+        if (isNaN(up) && isNaN(rate)) return;
+        const unitEl = tr.querySelector('[data-cell="unit"]');
+        rows.push({ up_to: isNaN(up) ? 0 : up, rate: isNaN(rate) ? 0 : rate, unit: unitEl ? (unitEl.value === 'lb' ? 'lb' : 'oz') : 'oz' });
+      });
+      return rows;
+    }
+
+    // 把表单当前值读回 shipCfg（切换模式、增删行时重渲染不丢数据）
+    function collectShip() {
+      const v = id => { const el = document.getElementById(id); return el ? String(el.value).trim() : ''; };
+      const n = id => { const x = parseFloat(v(id)); return isNaN(x) ? 0 : x; };
+      const c = shipCfg || {};
+      shipCfg = {
+        id: 'default',
+        mode: v('s-mode') || 'flat',
+        flat_rate: n('s-flat'),
+        free_threshold: n('s-threshold'),
+        free_after_discount: v('s-afterDisc') !== 'false',
+        packaging_weight_oz: n('s-pack'),
+        include_packaging_weight: v('s-incpack') === 'true',
+        active_template: (shipCfg && shipCfg.active_template) || '', // 保留当前模板标记
+        handling_fee: n('s-fee'),
+        origin_zip: v('s-zip'),
+        weight_rates: readRateRows('w'),
+        price_rates: readRateRows('p'),
+        zones: (c.zones || []).map((z, i) => ({
+          key: z.key || ('zone-' + i),
+          label: v('z-label-' + i) || z.label || '',
+          states: v('z-states-' + i) ? v('z-states-' + i).split(',').map(s => s.trim().toUpperCase()).filter(Boolean) : [],
+          surcharge: n('z-surcharge-' + i),
+          enabled: v('z-enabled-' + i) !== 'false'
+        }))
+      };
+      return shipCfg;
+    }
+
+    function rateTable(pfx, title, rows, upLabel) {
+      const list = rows || [];
+      const withUnit = pfx === 'w'; // 重量档支持 oz / 磅 并存
+      return `
+        <div class="field">
+          <label>${title}</label>
+          <table class="admin" style="margin-bottom:8px">
+            <thead><tr><th style="width:${withUnit ? '34%' : '45%'}">${upLabel}</th>${withUnit ? '<th style="width:19%">单位</th>' : ''}<th style="width:${withUnit ? '30%' : '35%'}">运费（$）</th><th style="width:17%"></th></tr></thead>
+            <tbody>
+              ${list.length ? list.map((r, i) => `<tr data-rate-row="${pfx}">
+                <td><input data-cell="up" type="number" step="0.01" value="${r.up_to}" placeholder="0 = 以上全部"></td>
+                ${withUnit ? `<td><select data-cell="unit"><option value="oz" ${r.unit !== 'lb' ? 'selected' : ''}>oz</option><option value="lb" ${r.unit === 'lb' ? 'selected' : ''}>磅 lb</option></select></td>` : ''}
+                <td><input data-cell="rate" type="number" step="0.01" value="${r.rate}"></td>
+                <td><button type="button" class="btn ghost small" data-del-rate="${pfx}" data-i="${i}">删除</button></td>
+              </tr>`).join('') : `<tr><td colspan="${withUnit ? 4 : 3}" class="muted">暂无档位，点下方按钮添加。</td></tr>`}
+            </tbody>
+          </table>
+          <button type="button" class="btn small" data-add-rate="${pfx}">+ 添加档位</button>
+          <div class="muted" style="font-size:12px;margin-top:6px">按从小到大排列；最后一档上限填 <strong>0</strong> 表示「以上全部」。${withUnit ? '每档可选 oz 或磅 lb，系统自动换算比较。' : ''}</div>
+        </div>`;
+    }
+
+    function shipForm(c) {
+      const zones = (c.zones || []).map((z, i) => `
+        <tr>
+          <td><input id="z-label-${i}" value="${z.label||''}"></td>
+          <td><input id="z-states-${i}" value="${(z.states||[]).join(', ')}" placeholder="留空＝默认区（其余全部州）"></td>
+          <td><input id="z-surcharge-${i}" type="number" step="0.01" value="${z.surcharge||0}"></td>
+          <td><select id="z-enabled-${i}"><option value="true" ${z.enabled!==false?'selected':''}>启用</option><option value="false" ${z.enabled===false?'selected':''}>停用</option></select></td>
+          <td><button type="button" class="btn ghost small" data-del-zone="${i}">删除</button></td>
+        </tr>`).join('');
+      return `
+        <div class="note blue">美国物流惯例：商品重量用 <strong>oz（盎司，16oz = 1lb）</strong>，外包装尺寸用 <strong>in（英寸）</strong>。每件商品的重量与尺寸在「商品」页签里单独填写；这里设置<strong>运费规则</strong>。</div>
+        <div class="field" style="margin-top:12px">
+          <label>运费模板（保存多套配置，随时切换使用）</label>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <select id="tpl-select" style="flex:1;min-width:230px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:13px">
+              ${shipTemplates.length ? shipTemplates.map(t => `<option value="${esc(t.id)}" ${shipSaved && shipSaved.active_template === t.name ? 'selected' : ''}>${esc(t.name)}${shipSaved && shipSaved.active_template === t.name ? '（使用中）' : ''}</option>`).join('') : '<option value="">（还没有保存过模板）</option>'}
+            </select>
+            <button type="button" class="btn small" id="tpl-use">使用此模板</button>
+            <button type="button" class="btn small" id="tpl-save">另存为模板</button>
+            <button type="button" class="btn small" id="tpl-update">保存修改到模板</button>
+            <button type="button" class="btn ghost small" id="tpl-del">删除</button>
+          </div>
+          <div class="muted" style="font-size:12px;margin-top:6px">
+            「另存为模板」= 把当前表单存成一套新配置；「使用此模板」= 立即用这套配置跑线上结算（相当于保存并切换）；「保存修改到模板」= 把当前表单覆盖到选中的模板（不切换线上）。当前面板改完点「保存物流设置」才会生效。
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+          <div class="field"><label>发货地邮编（Origin ZIP）</label><input id="s-zip" value="${c.origin_zip||''}" placeholder="78701"></div>
+          <div class="field"><label>计费方式</label><select id="s-mode">
+            <option value="flat" ${c.mode==='flat'?'selected':''}>统一费率</option>
+            <option value="weight" ${c.mode==='weight'?'selected':''}>按重量分段</option>
+            <option value="price" ${c.mode==='price'?'selected':''}>按订单金额分段</option></select></div>
+        </div>
+        <div class="muted" style="font-size:12px;margin:-4px 0 12px">${MODE_HINT[c.mode]||''}</div>
+        ${c.mode==='flat' ? `<div class="field"><label>统一运费（$）</label><input id="s-flat" type="number" step="0.01" value="${c.flat_rate||0}"></div>` : ''}
+        ${c.mode==='weight' ? rateTable('w', '按重量分段费率', c.weight_rates, '重量上限（0 = 以上全部）') : ''}
+        ${c.mode==='price' ? rateTable('p', '按金额分段费率', c.price_rates, '订单金额上限（$，0 = 以上全部）') : ''}
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="field"><label>免邮门槛（$，0 表示不免邮）</label><input id="s-threshold" type="number" step="0.01" value="${c.free_threshold||0}"></div>
+          <div class="field"><label>免邮门槛按</label><select id="s-afterDisc">
+            <option value="true" ${c.free_after_discount!==false?'selected':''}>折后金额</option>
+            <option value="false" ${c.free_after_discount===false?'selected':''}>折前金额</option></select></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+          <div class="field"><label>包装重量（oz，纸箱+填充物）</label><input id="s-pack" type="number" step="0.01" value="${c.packaging_weight_oz||0}"></div>
+          <div class="field"><label>结算时加收包装重量？</label><select id="s-incpack">
+            <option value="false" ${c.include_packaging_weight!==true?'selected':''}>不加收（按商品净重计费）</option>
+            <option value="true" ${c.include_packaging_weight===true?'selected':''}>加收（每单计入包装重量）</option></select></div>
+          <div class="field"><label>订单处理费（$，每单额外收）</label><input id="s-fee" type="number" step="0.01" value="${c.handling_fee||0}"></div>
+        </div>
+        <div class="field">
+          <label>配送区域与附加费</label>
+          <table class="admin" style="margin-bottom:8px">
+            <thead><tr><th>区域名称</th><th>包含的州（英文逗号分隔）</th><th style="width:110px">附加费（$）</th><th style="width:90px">启用</th><th></th></tr></thead>
+            <tbody>${zones}</tbody>
+          </table>
+          <button type="button" class="btn small" id="s-addzone">+ 添加区域</button>
+          <div class="muted" style="font-size:12px;margin-top:6px">至少保留一个「州留空」的默认区；收货州未匹配到任何区域时，按默认区计费。</div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:8px">
+          <button class="btn red small" id="s-save">保存物流设置</button>
+          <button class="btn ghost small" id="s-reset">恢复默认</button>
+        </div>
+
+        <h3 style="margin:22px 0 10px;font-size:18px">运费试算</h3>
+        <div class="summary">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+            <div class="field"><label>商品总重</label>
+              <div style="display:flex;gap:6px">
+                <input id="t-oz" type="number" step="0.01" value="12" style="flex:1">
+                <select id="t-unit" style="width:82px"><option value="oz">oz 盎司</option><option value="lb">磅 lb</option></select>
+              </div>
+            </div>
+            <div class="field"><label>订单金额（$）</label><input id="t-amt" type="number" step="0.01" value="30"></div>
+            <div class="field"><label>收货州</label><input id="t-state" value="TX" placeholder="TX / AK / PR"></div>
+          </div>
+          <button class="btn small" id="t-run">试算运费</button>
+          <div id="t-out" style="margin-top:10px"></div>
+        </div>`;
+    }
+
+    function bindShipping() {
+      const modeEl = document.getElementById('s-mode');
+      if (modeEl) modeEl.onchange = () => { collectShip(); drawShipping(); };
+
+      document.querySelectorAll('[data-add-rate]').forEach(b => b.onclick = () => {
+        collectShip();
+        const key = b.dataset.addRate === 'w' ? 'weight_rates' : 'price_rates';
+        shipCfg[key] = (shipCfg[key] || []).concat([{ up_to: 0, rate: 0 }]);
+        drawShipping();
+      });
+      document.querySelectorAll('[data-del-rate]').forEach(b => b.onclick = () => {
+        collectShip();
+        const key = b.dataset.delRate === 'w' ? 'weight_rates' : 'price_rates';
+        shipCfg[key].splice(parseInt(b.dataset.i), 1);
+        drawShipping();
+      });
+      const addZone = document.getElementById('s-addzone');
+      if (addZone) addZone.onclick = () => {
+        collectShip();
+        shipCfg.zones = (shipCfg.zones || []).concat([{ key: 'zone-' + Date.now(), label: '新区域', states: [], surcharge: 0, enabled: true }]);
+        drawShipping();
+      };
+      document.querySelectorAll('[data-del-zone]').forEach(b => b.onclick = () => {
+        collectShip();
+        shipCfg.zones.splice(parseInt(b.dataset.delZone), 1);
+        drawShipping();
+      });
+
+      document.getElementById('s-save').onclick = () => withSaving(document.getElementById('s-save'), async () => {
+        const { ok, error } = await window.Data.saveShippingSettings(collectShip());
+        if (!ok) { window.Layout.toast('保存失败：' + (error||'')); return; }
+        shipSaved = JSON.parse(JSON.stringify(shipCfg)); // 刷新「当前生效模板」卡片
+        shipSaved.updated_at = new Date().toISOString();
+        drawShipping();
+        window.Layout.toast('物流设置已保存');
+      }, '保存中…');
+      const reset = document.getElementById('s-reset');
+      if (reset) reset.onclick = async () => {
+        if (!confirm('确认恢复为默认物流设置？')) return;
+        shipCfg = Object.assign({}, window.Data.DEFAULT_SHIPPING);
+        const { ok, error } = await window.Data.saveShippingSettings(shipCfg);
+        if (!ok) { window.Layout.toast('保存失败：' + (error||'')); return; }
+        shipSaved = JSON.parse(JSON.stringify(shipCfg)); // 刷新「当前生效模板」卡片
+        shipSaved.updated_at = new Date().toISOString();
+        window.Layout.toast('已恢复默认设置'); drawShipping();
+      };
+
+      /* —— 运费模板：另存 / 更新 / 使用 / 删除 —— */
+      async function refreshTemplates() {
+        try { shipTemplates = await window.Data.getShippingTemplates() || []; } catch (e) { shipTemplates = []; }
+        drawShipping();
+      }
+      const tplUse = document.getElementById('tpl-use');
+      if (tplUse) tplUse.onclick = async () => {
+        const id = (document.getElementById('tpl-select') || {}).value;
+        if (!id) { window.Layout.toast('先保存一个模板，或选择已有模板'); return; }
+        if (!confirm('使用此模板会立即覆盖当前物流设置，线上结算马上按这套跑。确认？')) return;
+        const { ok, error, settings, name } = await window.Data.useShippingTemplate(id);
+        if (!ok) { window.Layout.toast('切换失败：' + (error || '')); return; }
+        shipCfg = JSON.parse(JSON.stringify(settings));
+        shipSaved = JSON.parse(JSON.stringify(settings));
+        shipSaved.updated_at = new Date().toISOString();
+        await refreshTemplates();
+        window.Layout.toast('已切换到模板「' + (name || '') + '」，即时生效');
+      };
+      const tplSave = document.getElementById('tpl-save');
+      if (tplSave) tplSave.onclick = async () => {
+        const name = (prompt('给这套配置起个模板名（如：USPS Ground · 轻小件）：') || '').trim();
+        if (!name) return;
+        const { ok, error } = await window.Data.saveShippingTemplate(null, name, collectShip());
+        if (!ok) { window.Layout.toast('保存失败：' + (error || '')); return; }
+        await refreshTemplates();
+        window.Layout.toast('已存为模板「' + name + '」，可随时点「使用此模板」切换');
+      };
+      const tplUpdate = document.getElementById('tpl-update');
+      if (tplUpdate) tplUpdate.onclick = async () => {
+        const sel = document.getElementById('tpl-select');
+        const id = sel && sel.value;
+        if (!id) { window.Layout.toast('先选择要更新的模板'); return; }
+        const t = (shipTemplates || []).filter(x => x.id === id)[0];
+        if (!t) { window.Layout.toast('模板不存在，请刷新页签'); return; }
+        if (!confirm('把当前表单覆盖到模板「' + t.name + '」？（不会切换线上设置）')) return;
+        const { ok, error } = await window.Data.saveShippingTemplate(id, t.name, collectShip());
+        if (!ok) { window.Layout.toast('保存失败：' + (error || '')); return; }
+        await refreshTemplates();
+        window.Layout.toast('模板「' + t.name + '」已更新');
+      };
+      const tplDel = document.getElementById('tpl-del');
+      if (tplDel) tplDel.onclick = async () => {
+        const sel = document.getElementById('tpl-select');
+        const id = sel && sel.value;
+        if (!id) { window.Layout.toast('先选择要删除的模板'); return; }
+        const t = (shipTemplates || []).filter(x => x.id === id)[0];
+        if (!t) return;
+        if (!confirm('确认删除模板「' + t.name + '」？正在生效的设置不受影响。')) return;
+        const { ok, error } = await window.Data.deleteShippingTemplate(id);
+        if (!ok) { window.Layout.toast('删除失败：' + (error || '')); return; }
+        await refreshTemplates();
+        window.Layout.toast('已删除模板「' + t.name + '」');
+      };
+
+      const run = document.getElementById('t-run');
+      if (run) run.onclick = () => {
+        const cfg = collectShip();
+        const unit = (document.getElementById('t-unit') || {}).value === 'lb' ? 'lb' : 'oz';
+        const rawOz = parseFloat(document.getElementById('t-oz').value) || 0;
+        const oz = unit === 'lb' ? rawOz * 16 : rawOz; // 磅统一换算成 oz 再算
+        const amt = parseFloat(document.getElementById('t-amt').value) || 0;
+        const st = (document.getElementById('t-state').value || '').trim().toUpperCase();
+        const r = window.Data.computeShipping({
+          items: [{ qty: 1, weight_oz: oz }], subtotal: amt, discountedSubtotal: amt, destState: st
+        }, cfg);
+        const inputEcho = unit === 'lb' ? `（输入 ${rawOz} 磅 = ${oz} oz）` : '';
+        const weightLine = cfg.include_packaging_weight
+          ? `计费重量：<strong>${r.weightOz} oz</strong>（商品 ${r.goodsOz} + 包装 ${cfg.packaging_weight_oz}）${inputEcho}`
+          : `计费重量：<strong>${r.weightOz} oz</strong>（商品净重，不加收包装）${inputEcho}`;
+        // 面板改动尚未保存时，提醒与线上实际模板的差异
+        const s = shipSaved || {};
+        const diff = !s.mode || s.mode !== cfg.mode || (+s.flat_rate || 0) !== (+cfg.flat_rate || 0)
+          || (+s.free_threshold || 0) !== (+cfg.free_threshold || 0)
+          || !!s.include_packaging_weight !== !!cfg.include_packaging_weight;
+        const warn = diff
+          ? `<div class="muted" style="margin-top:8px;padding:8px 10px;background:#fff7e6;border:1px solid #f0e0a8;border-radius:8px">⚠️ 以上按<strong>面板当前（尚未保存）</strong>的设置试算；线上实际生效的是「${MODE_TXT[s.mode] || s.mode}」，点「保存物流设置」后才会切换。</div>`
+          : '';
+        const rows = [
+          `计费模式：<strong>${MODE_TXT[cfg.mode] || cfg.mode}</strong>${cfg.mode === 'flat' ? '（统一费率下，下方重量/金额分段表不参与计算）' : ''}`,
+          weightLine,
+          `匹配区域：<strong>${r.zoneLabel || '—'}</strong>`,
+          `基础运费：${window.Money(r.base)}`,
+          cfg.handling_fee > 0 ? `订单处理费：${window.Money(r.handling)}` : '',
+          r.surcharge > 0 ? `区域附加费：${window.Money(r.surcharge)}` : '',
+          r.free ? `<strong style="color:#2e8b57">应付运费：免运费</strong>${r.reason === 'threshold' ? `（已满 ${window.Money(cfg.free_threshold)} 门槛）` : ''}` : `<strong>应付运费：${window.Money(r.rate)}</strong>`
+        ].filter(Boolean);
+        document.getElementById('t-out').innerHTML = `<div class="note ${r.free ? 'green' : 'blue'}">${rows.join('<br>')}</div>` + warn;
+      };
+    }
+
+    /* ============================================================
+     *  HOME（首页装修：头图 / 分类入口 / 畅销商品 / 品牌故事 / 优势 / 底部横幅）
+     * ============================================================ */
+    const homeEl = document.getElementById('home-panel');
+    let homeCfg = null;
+    let homeProducts = [];
+
+    const esc = s => String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+    async function renderHome() {
+      homeCfg = await window.Data.getHomeSettings();
+      try { homeProducts = await window.Data.getProductsList(); } catch (e) { homeProducts = []; }
+      drawHome();
+    }
+    function drawHome() {
+      homeEl.innerHTML = homeForm(homeCfg);
+      bindHome();
+      updateSelCount();
+    }
+
+    // 「已选 N / M」实时计数（勾选即时更新，不重排、不丢滚动位置）
+    function updateSelCount() {
+      const el = document.getElementById('h-fselcount');
+      if (!el) return;
+      const total = (homeProducts || []).length;
+      const checked = document.querySelectorAll('[data-fslug]:checked').length;
+      el.textContent = '已选 ' + checked + ' / ' + total + ' 件商品上首页畅销货架（表格内滚动查看，表头固定）';
+    }
+
+    // 广告位行 HTML（3 槽）：{image, link_type:'none'|'category'|'product', link_value, label}
+    function adRowsHtml(group, ads) {
+      ads = (ads && ads.length) ? ads : [];
+      const ensure = i => ads[i] || { image: '', link_type: 'none', link_value: '', label: '' };
+      const opts = a => {
+        const t = a.link_type;
+        const cur = a.link_value || '';
+        // 目标已停用/被删除时，仍保留当前值并标注，避免重渲染把已配好的跳转静默清空
+        const keep = (found, kind) => (cur && !found)
+          ? `<option value="${esc(cur)}" selected>${esc(cur)}（${kind}已停用或已删除，保存会保留此值）</option>` : '';
+        if (t === 'category') {
+          const list = CAT_LIST.filter(c => c.enabled !== false);
+          const found = list.some(c => c.key === cur);
+          return '<option value="">— 选分类 —</option>' + keep(found, '分类') + list.map(c =>
+            `<option value="${esc(c.key)}" ${cur === c.key ? 'selected' : ''}>${esc(c.label_en || c.key)}</option>`).join('');
+        }
+        if (t === 'product') {
+          const list = homeProducts || [];
+          const found = list.some(p => p.slug === cur);
+          return '<option value="">— 选商品 —</option>' + keep(found, '商品') + list.map(p =>
+            `<option value="${esc(p.slug)}" ${cur === p.slug ? 'selected' : ''}>${esc(p.name || p.slug)}</option>`).join('');
+        }
+        return '<option value="">（先选左侧跳转类型）</option>';
+      };
+      let s = '';
+      for (let i = 0; i < 3; i++) {
+        const a = ensure(i);
+        s += `<tr data-ads-row data-ads="${group}" data-i="${i}">
+          <td>
+            <div class="img-prev" style="width:150px;height:96px">${a.image ? `<img src="${a.image}" alt="">` : '<span class="muted">未上传</span>'}</div>
+            <input type="file" accept="image/*" data-adsfile hidden>
+            <div style="display:flex;gap:6px;margin-top:5px">
+              <button type="button" class="btn small" data-adpick>上传</button>
+              <button type="button" class="btn ghost small" data-adclear ${a.image ? '' : 'hidden'}>移除</button>
+            </div>
+          </td>
+          <td>
+            <select data-adtype>
+              <option value="none" ${a.link_type === 'none' ? 'selected' : ''}>不跳转</option>
+              <option value="category" ${a.link_type === 'category' ? 'selected' : ''}>分类</option>
+              <option value="product" ${a.link_type === 'product' ? 'selected' : ''}>商品</option>
+            </select>
+            <div class="muted" style="font-size:11px;margin-top:4px">改类型后目标下拉会刷新</div>
+          </td>
+          <td><select data-adval>${opts(a)}</select></td>
+          <td><input data-adlabel value="${esc(a.label)}" placeholder="如：辣条节 8 折"></td>
+        </tr>`;
+      }
+      return s;
+    }
+
+    // 广告位上传 + 类型切换绑定（每次 drawHome 重渲染后重绑）
+    function bindAdUploads(group) {
+      document.querySelectorAll('[data-ads-row][data-ads="' + group + '"]').forEach(tr => {
+        const i = parseInt(tr.dataset.i, 10);
+        const pick = tr.querySelector('[data-adpick]');
+        const fileInput = tr.querySelector('[data-adsfile]');
+        const clearBtn = tr.querySelector('[data-adclear]');
+        const typeSel = tr.querySelector('[data-adtype]');
+        if (pick) pick.onclick = () => fileInput && fileInput.click();
+        if (typeSel) typeSel.onchange = () => { collectHome(); drawHome(); };
+        if (fileInput) fileInput.onchange = async () => {
+          const files = fileInput.files;
+          if (!files || !files.length) return;
+          pick.textContent = '处理中…';
+          try {
+            // 头图格只显示 ~304px 宽、轮播 ~940px 宽：按显示尺寸压缩即可，
+            // 全部按 1600px 压会让 base64 撑爆保存请求（曾有保存报错）
+            const maxW = group === 'promo_ads' ? 1400 : 900;
+            // 单张上限：头图格 120KB / 轮播格 150KB；压完还超就自动再压一轮，
+            // 避免 6 张图叠加后保存请求被网关拒收（此前「上传后报错」的根因）
+            const limit = group === 'promo_ads' ? 150 * 1024 : 120 * 1024;
+            const dataUrl = await compressToLimit(files[0], maxW, 0.8, limit);
+            const url = await window.Data.uploadMedia(dataUrl, 'home');
+            collectHome();
+            if (!homeCfg[group]) homeCfg[group] = [];
+            if (!homeCfg[group][i]) homeCfg[group][i] = { image: '', link_type: 'none', link_value: '', label: '' };
+            homeCfg[group][i].image = url;
+            drawHome();
+            window.Layout.toast('广告图已就绪（' + Math.round(dataUrlBytes(dataUrl) / 1024) + 'KB）——记得点「保存首页」生效');
+          } catch (e) {
+            console.error('[HQ] ad upload failed:', e);
+            window.Layout.toast('图片处理失败：' + (e && e.message ? e.message : e));
+          } finally {
+            pick.textContent = '上传';
+            fileInput.value = '';
+          }
+        };
+        if (clearBtn) clearBtn.onclick = () => {
+          collectHome();
+          if (homeCfg[group] && homeCfg[group][i]) homeCfg[group][i].image = '';
+          drawHome();
+        };
+      });
+    }
+
+    // 头图上传（复用压缩函数；头图建议宽一点，1600px）
+    function bindHeroUpload() {
+      const fileInput = document.getElementById('h-imgfile');
+      const pickBtn = document.getElementById('h-imgpick');
+      const clearBtn = document.getElementById('h-imgclear');
+      const prev = document.getElementById('h-imgprev');
+      if (pickBtn) pickBtn.onclick = () => fileInput && fileInput.click();
+      if (fileInput) fileInput.onchange = async () => {
+        const files = fileInput.files;
+        if (!files || !files.length) return;
+        pickBtn.textContent = '处理中…';
+        try {
+          const dataUrl = await compressToLimit(files[0], 1600, 0.82, 260 * 1024);
+          const url = await window.Data.uploadMedia(dataUrl, 'home');
+          collectHome();
+          homeCfg.hero.image = url;
+          prev.innerHTML = `<img src="${url}" alt="">`;
+          if (clearBtn) clearBtn.hidden = false;
+          window.Layout.toast('头图已就绪（' + Math.round(dataUrlBytes(dataUrl) / 1024) + 'KB）——记得点「保存首页」生效');
+        } catch (e) {
+          console.error('[HQ] hero upload failed:', e);
+          window.Layout.toast('图片处理失败：' + (e && e.message ? e.message : e));
+        } finally {
+          pickBtn.textContent = '上传头图';
+          fileInput.value = '';
+        }
+      };
+      if (clearBtn) clearBtn.onclick = () => {
+        collectHome();
+        homeCfg.hero.image = '';
+        prev.innerHTML = '<span class="muted">未上传</span>';
+        clearBtn.hidden = true;
+      };
+    }
+
+    // 首页图片总体重提示：图片以 base64 存库，越大 → 前台首屏越慢、保存越容易失败
+    function imgWeightNote(c) {
+      let total = dataUrlBytes(c && c.hero ? c.hero.image : '');
+      ['hero_ads', 'promo_ads'].forEach(g => {
+        ((c && c[g]) || []).forEach(a => { total += dataUrlBytes(a && a.image); });
+      });
+      if (total < 400 * 1024) return '';
+      const kb = Math.round(total / 1024);
+      return `<div class="muted" style="font-size:12.5px;margin:0 0 10px;padding:8px 10px;background:#fff6e5;border:1px solid #f0d9a8;border-radius:8px;line-height:1.7">
+        <b>图片总体积偏大：约 ${kb}KB</b>（建议 ≤400KB）。<br>
+        首页图片是 base64 直接存进数据库的：体积越大，顾客端首屏加载越慢，保存时也可能因请求过大被网关拒收（表现就是「上传后报错」）。<br>
+        请对偏大的那一格<b>重新上传一次</b>——系统会自动压缩到安全体积（单张上限：头图格 120KB / 轮播格 150KB）。
+      </div>`;
+    }
+
+    function homeForm(c) {
+      c = c || window.Data.DEFAULT_HOME;
+      const hero = c.hero || {};
+      const story = c.story || {};
+      const drop = c.drop || {};
+      const feat = c.featured || { mode: 'recent', count: 8, slugs: [] };
+      const badges = (hero.badges || []).map((b, i) => `
+        <tr data-badge-row>
+          <td><input data-cell="text" value="${esc(b)}" placeholder="如：Ships in 1 business day"></td>
+          <td style="width:70px"><button type="button" class="btn ghost small" data-del-badge="${i}">删除</button></td>
+        </tr>`).join('');
+      const cats = (c.categories || []).map((x, i) => `
+        <tr data-cat-row>
+          <td style="width:80px"><input data-cell="emoji" value="${esc(x.emoji)}" placeholder="🌶️"></td>
+          <td><input data-cell="label" value="${esc(x.label)}" placeholder="分类名称（顾客端显示）"></td>
+          <td><input data-cell="key" value="${esc(x.key)}" placeholder="分类 key，如 spicy-strips"></td>
+          <td style="width:70px"><button type="button" class="btn ghost small" data-del-cat="${i}">删除</button></td>
+        </tr>`).join('');
+      const vals = (c.values || []).map((v, i) => `
+        <tr data-val-row>
+          <td style="width:80px"><input data-cell="icon" value="${esc(v.icon)}" placeholder="🚚"></td>
+          <td style="width:30%"><input data-cell="title" value="${esc(v.title)}"></td>
+          <td><input data-cell="body" value="${esc(v.body)}"></td>
+          <td style="width:70px"><button type="button" class="btn ghost small" data-del-val="${i}">删除</button></td>
+        </tr>`).join('');
+      const selSlugs = feat.mode === 'manual' ? (feat.slugs || []) : [];
+      // 表格行按「序号」排序展示（勾选的在前、按序号；未勾选的按原顺序排后面）——所见即所得
+      const ordKey = p => { const i = selSlugs.indexOf(p.slug); return i >= 0 ? i : 1000 + (homeProducts || []).indexOf(p); };
+      const prodRows = [...(homeProducts || [])].sort((a, b) => ordKey(a) - ordKey(b)).map((p) => {
+        const checked = selSlugs.indexOf(p.slug) >= 0;
+        const ord = checked ? selSlugs.indexOf(p.slug) + 1 : (selSlugs.length + (homeProducts || []).indexOf(p) + 1);
+        return `<tr>
+          <td style="width:50px;text-align:center"><input type="checkbox" data-fslug="${esc(p.slug)}" ${checked ? 'checked' : ''}></td>
+          <td><strong>${esc(p.name)}</strong><br><span class="muted" style="font-size:12px">${esc(p.slug)}</span></td>
+          <td style="width:90px"><input data-forder="${esc(p.slug)}" type="number" value="${ord}" min="1" style="width:70px"></td>
+        </tr>`;
+      }).join('');
+
+      return `
+        <div class="muted" style="font-size:11px;text-align:right">装修面板 build 1021-d（看到这行说明你已在使用最新后台页；没有这行 = 浏览器缓存了旧版，请硬刷新 Ctrl+Shift+R）</div>
+        <div class="note blue">这里编辑<strong>商店首页</strong>（顾客端页面保持英文）。所有改动保存后即时生效；不确定怎么填时，先「恢复默认」看效果再逐项改。</div>
+        ${imgWeightNote(c)}
+
+        <h3 style="margin:20px 0 10px;font-size:18px">一、首页头图（Hero）</h3>
+        <div class="field"><label>眉标（小字，如 Stocked in the US）</label><input id="h-eyebrow" value="${esc(hero.eyebrow)}"></div>
+        <div class="field"><label>大标题（每行一行，回车换行）</label><textarea id="h-title" rows="3">${esc(hero.title || '')}</textarea></div>
+        <div class="field"><label>副文案</label><textarea id="h-lead" rows="3">${esc(hero.lead || '')}</textarea></div>
+        <div class="field">
+          <label>徽章（头图下方的三个小标签）</label>
+          <table class="admin" style="margin-bottom:8px">
+            <thead><tr><th>文案</th><th></th></tr></thead>
+            <tbody>${badges || '<tr><td class="muted">暂无徽章</td><td></td></tr>'}</tbody>
+          </table>
+          <button type="button" class="btn small" id="h-addbadge">+ 添加徽章</button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="field"><label>主按钮文字</label><input id="h-cta1-label" value="${esc((hero.cta_primary||{}).label)}"></div>
+          <div class="field"><label>主按钮链接</label><input id="h-cta1-href" value="${esc((hero.cta_primary||{}).href)}" placeholder="shop.html"></div>
+          <div class="field"><label>次按钮文字</label><input id="h-cta2-label" value="${esc((hero.cta_secondary||{}).label)}"></div>
+          <div class="field"><label>次按钮链接</label><input id="h-cta2-href" value="${esc((hero.cta_secondary||{}).href)}" placeholder="story.html"></div>
+        </div>
+        <div class="field">
+          <label>头图（不上传则显示 emoji 占位图）</label>
+          <div class="img-upload">
+            <div class="img-prev" id="h-imgprev" style="width:180px;height:120px">${hero.image ? `<img src="${hero.image}" alt="">` : '<span class="muted">未上传</span>'}</div>
+            <div class="img-side">
+              <input type="file" id="h-imgfile" accept="image/*" hidden>
+              <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <button type="button" class="btn small" id="h-imgpick">上传头图</button>
+                <button type="button" class="btn ghost small" id="h-imgclear" ${hero.image ? '' : 'hidden'}>移除</button>
+              </div>
+              <div class="muted" style="font-size:12px;margin-top:6px">JPG / PNG，自动压缩至 ≤1600px 宽。建议横构图（约 5:3）。</div>
+            </div>
+          </div>
+        </div>
+        <div class="field"><label>头图右下角小字（图片下方说明）</label><input id="h-art" value="${esc(hero.art_text)}"></div>
+
+        <h3 style="margin:24px 0 10px;font-size:18px">一·B 头图广告位（3 个）</h3>
+        <p class="muted" style="font-size:13px;margin:0 0 10px">配置了图片后，首页头图位置改为展示这 3 个广告位（点击可跳分类 / 商品）。三张都留空则回退到上面的默认头图文案。</p>
+        <div class="muted" style="font-size:12.5px;margin:0 0 10px;padding:8px 10px;background:var(--cream,#faf7f2);border-radius:8px;line-height:1.7">
+          <b>图片尺寸</b>：比例 <b>5:2</b>（扁横图）。桌面端三格并排，<b>每格显示约 304×122 px</b>。<br>
+          建议上传 <b>1000×400 px</b>（高清屏用 1200×480），最小不低于 <b>608×244 px</b>。<br>
+          三张图片比例请保持一致，否则高度会不齐。
+        </div>
+        <div class="field">
+          <table class="admin" style="margin-bottom:8px">
+            <thead><tr><th style="width:210px">广告图 <span class="muted" style="font-weight:400;font-size:11px">5:2 · 建议 1000×400</span></th><th style="width:120px">跳转类型</th><th>跳转目标</th><th>文案 / alt</th></tr></thead>
+            <tbody>${adRowsHtml('hero_ads', c.hero_ads)}</tbody>
+          </table>
+        </div>
+
+        <h3 style="margin:24px 0 10px;font-size:18px">一·C 促销轮播（3 张）</h3>
+        <p class="muted" style="font-size:13px;margin:0 0 10px">替换首页顶部 LATIAO10 促销条为 3 张自动轮播广告图（每 4 秒切换，悬停暂停）。三张都留空则回退原促销条。</p>
+        <div class="muted" style="font-size:12.5px;margin:0 0 10px;padding:8px 10px;background:var(--cream,#faf7f2);border-radius:8px;line-height:1.7">
+          <b>图片尺寸</b>：比例 <b>8:1</b>（超扁横幅），主栏整宽显示，<b>前台约 940×118 px</b>。<br>
+          建议上传 <b>1600×200 px</b>（或 1880×235），最小不低于 <b>1200×150 px</b>。<br>
+          ⚠️ 手机端会裁成 <b>3:1</b>（左右各裁掉约 20%）——<b>文字和主体务必放在画面正中间</b>，否则手机上会被切掉。
+        </div>
+        <div class="field">
+          <table class="admin" style="margin-bottom:8px">
+            <thead><tr><th style="width:210px">广告图 <span class="muted" style="font-weight:400;font-size:11px">8:1 · 建议 1600×200</span></th><th style="width:120px">跳转类型</th><th>跳转目标</th><th>文案 / alt</th></tr></thead>
+            <tbody>${adRowsHtml('promo_ads', c.promo_ads)}</tbody>
+          </table>
+        </div>
+
+        <h3 style="margin:24px 0 10px;font-size:18px">二、分类入口</h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="field"><label>眉标</label><input id="h-ckicker" value="${esc((c.cats_head||{}).kicker)}"></div>
+          <div class="field"><label>标题</label><input id="h-ctitle" value="${esc((c.cats_head||{}).title)}"></div>
+        </div>
+        <div class="field"><label>副标题</label><input id="h-csub" value="${esc((c.cats_head||{}).sub)}"></div>
+        <div class="field">
+          <table class="admin" style="margin-bottom:8px">
+            <thead><tr><th>图标</th><th>名称</th><th>分类 key</th><th></th></tr></thead>
+            <tbody>${cats || '<tr><td colspan="4" class="muted">暂无分类入口</td></tr>'}</tbody>
+          </table>
+          <button type="button" class="btn small" id="h-addcat">+ 添加分类入口</button>
+          <button type="button" class="btn ghost small" id="h-synccat">从「商品分类」同步</button>
+          <div class="muted" style="font-size:12px;margin-top:6px">分类 key 需与商品编辑页的分类一致（spicy-strips / chocolate-bites / variety-packs / bundles），点击后跳转 shop.html?cat=对应分类。</div>
+        </div>
+
+        <h3 style="margin:24px 0 10px;font-size:18px">三、畅销商品</h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="field"><label>眉标</label><input id="h-fkicker" value="${esc((c.feat_head||{}).kicker)}"></div>
+          <div class="field"><label>标题</label><input id="h-ftitle" value="${esc((c.feat_head||{}).title)}"></div>
+        </div>
+        <div class="field"><label>副标题</label><input id="h-fsub" value="${esc((c.feat_head||{}).sub)}"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="field"><label>选取方式</label><select id="h-fmode">
+            <option value="recent" ${feat.mode!=='manual'?'selected':''}>最新上架的 N 个</option>
+            <option value="manual" ${feat.mode==='manual'?'selected':''}>手动勾选商品</option></select></div>
+          <div class="field"><label>最新上架取几个</label><input id="h-fcount" type="number" min="1" max="24" value="${feat.count||8}" ${feat.mode==='manual'?'disabled':''}></div>
+        </div>
+        <div id="h-manual-box" style="${feat.mode==='manual'?'':'display:none'}">
+          <div class="field">
+            <label>勾选上首页的商品，并按「序号」排序（1 在最前；改完序号点别处，表格会自动按新顺序重排）</label>
+            <div class="tbl-scroll" id="h-fscroll">
+              <table class="admin">
+                <thead><tr><th style="width:50px">上首页</th><th>商品</th><th>序号</th></tr></thead>
+                <tbody>${prodRows || '<tr><td colspan="3" class="muted">暂无商品，请先在「商品」页签上架。</td></tr>'}</tbody>
+              </table>
+            </div>
+            <div class="sel-count" id="h-fselcount"></div>
+          </div>
+        </div>
+
+        <h3 style="margin:24px 0 10px;font-size:18px">四、品牌故事</h3>
+        <div class="field"><label>眉标</label><input id="h-skicker" value="${esc(story.kicker)}"></div>
+        <div class="field"><label>标题</label><input id="h-stitle" value="${esc(story.title)}"></div>
+        <div class="field"><label>正文</label><textarea id="h-sbody" rows="4">${esc(story.body || '')}</textarea></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="field"><label>按钮文字</label><input id="h-slink" value="${esc(story.link_label)}"></div>
+          <div class="field"><label>右侧装饰文案（卡片里的大字）</label><input id="h-sart" value="${esc(story.art_text)}"></div>
+        </div>
+
+        <h3 style="margin:24px 0 10px;font-size:18px">五、Why us 优势（品牌故事下方的五个图标块）</h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="field"><label>眉标</label><input id="h-vkicker" value="${esc((c.values_head||{}).kicker)}"></div>
+          <div class="field"><label>标题</label><input id="h-vtitle" value="${esc((c.values_head||{}).title)}"></div>
+        </div>
+        <div class="field">
+          <table class="admin" style="margin-bottom:8px">
+            <thead><tr><th>图标</th><th>标题</th><th>说明</th><th></th></tr></thead>
+            <tbody>${vals || '<tr><td colspan="4" class="muted">暂无优势项</td></tr>'}</tbody>
+          </table>
+          <button type="button" class="btn small" id="h-addval">+ 添加优势项</button>
+        </div>
+
+        <h3 style="margin:24px 0 10px;font-size:18px">六、底部横幅（New here?）</h3>
+        <div class="field"><label>眉标</label><input id="h-dkicker" value="${esc(drop.kicker)}"></div>
+        <div class="field"><label>标题</label><input id="h-dtitle" value="${esc(drop.title)}"></div>
+        <div class="field"><label>正文</label><textarea id="h-dbody" rows="2">${esc(drop.body || '')}</textarea></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="field"><label>按钮文字</label><input id="h-dcta" value="${esc(drop.cta_label)}"></div>
+          <div class="field"><label>按钮链接</label><input id="h-dhref" value="${esc(drop.href)}" placeholder="product.html?slug=…"></div>
+        </div>
+
+        <div style="display:flex;gap:10px;margin-top:16px">
+          <button class="btn red small" id="h-save">保存首页</button>
+          <button class="btn ghost small" id="h-reset">恢复默认</button>
+        </div>`;
+    }
+
+    // 把表单当前值读回 homeCfg（增删行、切换模式时重渲染不丢数据）
+    function collectHome() {
+      const v = id => { const el = document.getElementById(id); return el ? String(el.value) : ''; };
+      const rows = (attr, cell) => Array.prototype.map.call(
+        document.querySelectorAll('[' + attr + ']'),
+        tr => {
+          const o = {};
+          tr.querySelectorAll('[data-cell]').forEach(inp => { o[inp.dataset.cell] = inp.value; });
+          return o;
+        });
+      const badges = rows('data-badge-row').map(r => r.text).filter(Boolean);
+      const categories = rows('data-cat-row').map(r => ({ key: (r.key||'').trim(), label: (r.label||'').trim(), emoji: (r.emoji||'').trim() })).filter(x => x.key);
+      const values = rows('data-val-row').map(r => ({ icon: (r.icon||'').trim(), title: (r.title||'').trim(), body: (r.body||'').trim() })).filter(x => x.title);
+      const sel = [];
+      document.querySelectorAll('[data-fslug]').forEach(cb => {
+        if (!cb.checked) return;
+        const slug = cb.dataset.fslug;
+        const ordEl = document.querySelector('[data-forder="' + slug + '"]');
+        const ord = parseInt(ordEl && ordEl.value, 10);
+        sel.push({ slug, ord: isNaN(ord) ? 999 : ord });
+      });
+      sel.sort((a, b) => a.ord - b.ord);
+      const base = homeCfg || window.Data.DEFAULT_HOME;
+      // 广告位旧图先存下来：下面 homeCfg 会被整体重建，重建后再读就读不到已上传的图（会全部丢失）
+      const prevAds = {
+        hero_ads: (base && base.hero_ads) || [],
+        promo_ads: (base && base.promo_ads) || []
+      };
+      homeCfg = {
+        hero: {
+          eyebrow: v('h-eyebrow'),
+          title: v('h-title'),
+          lead: v('h-lead'),
+          badges,
+          cta_primary: { label: v('h-cta1-label'), href: v('h-cta1-href') },
+          cta_secondary: { label: v('h-cta2-label'), href: v('h-cta2-href') },
+          image: (base.hero && base.hero.image) || '',
+          art_text: v('h-art')
+        },
+        categories: categories.length ? categories : (base.categories || []),
+        cats_head: {
+          kicker: v('h-ckicker'), title: v('h-ctitle'), sub: v('h-csub')
+        },
+        featured: {
+          mode: v('h-fmode') === 'manual' ? 'manual' : 'recent',
+          count: Math.max(1, parseInt(v('h-fcount'), 10) || 8),
+          slugs: sel.map(x => x.slug)
+        },
+        feat_head: {
+          kicker: v('h-fkicker'), title: v('h-ftitle'), sub: v('h-fsub')
+        },
+        story: {
+          kicker: v('h-skicker'), title: v('h-stitle'), body: v('h-sbody'),
+          link_label: v('h-slink'), art_text: v('h-sart')
+        },
+        values: values.length ? values : (base.values || []),
+        values_head: {
+          kicker: v('h-vkicker'), title: v('h-vtitle')
+        },
+        drop: {
+          kicker: v('h-dkicker'), title: v('h-dtitle'), body: v('h-dbody'),
+          cta_label: v('h-dcta'), href: v('h-dhref')
+        }
+      };
+      // 广告位：从 DOM 读回 3 槽；图片以 prevAds（重建前快照）里已存的 image 为准（避免重渲染丢图）
+      ['hero_ads', 'promo_ads'].forEach(g => {
+        const baseArr = prevAds[g] || [];
+        const arr = [];
+        document.querySelectorAll('[data-ads-row][data-ads="' + g + '"]').forEach(tr => {
+          const i = parseInt(tr.dataset.i, 10);
+          const tEl = tr.querySelector('[data-adtype]');
+          const vEl = tr.querySelector('[data-adval]');
+          const lEl = tr.querySelector('[data-adlabel]');
+          arr[i] = {
+            image: (baseArr[i] && baseArr[i].image) || '',
+            link_type: tEl ? tEl.value : 'none',
+            link_value: vEl ? vEl.value : '',
+            label: lEl ? lEl.value : ''
+          };
+        });
+        homeCfg[g] = arr;
+      });
+      return homeCfg;
+    }
+
+    function bindHome() {
+      bindHeroUpload();
+      bindAdUploads('hero_ads');
+      bindAdUploads('promo_ads');
+
+      document.getElementById('h-addbadge').onclick = () => {
+        collectHome();
+        homeCfg.hero.badges = (homeCfg.hero.badges || []).concat(['']);
+        drawHome();
+      };
+      document.querySelectorAll('[data-del-badge]').forEach(b => b.onclick = () => {
+        collectHome();
+        homeCfg.hero.badges.splice(parseInt(b.dataset.delBadge, 10), 1);
+        drawHome();
+      });
+      document.getElementById('h-addcat').onclick = () => {
+        collectHome();
+        homeCfg.categories = (homeCfg.categories || []).concat([{ key: '', label: '', emoji: '🍬' }]);
+        drawHome();
+      };
+      const syncCatBtn = document.getElementById('h-synccat');
+      if (syncCatBtn) syncCatBtn.onclick = () => {
+        collectHome();
+        const src = (CAT_LIST.length ? CAT_LIST : window.Shop.getCategories(true)).filter(c => c.enabled !== false);
+        if (!src.length) { window.Layout.toast('「商品分类」页签里还没有启用的分类'); return; }
+        homeCfg.categories = src.map(c => ({ key: c.key, label: c.label_en || c.key, emoji: c.emoji || '🍬' }));
+        drawHome();
+        window.Layout.toast('已同步 ' + src.length + ' 个分类入口——记得点「保存首页」生效');
+      };
+      document.querySelectorAll('[data-del-cat]').forEach(b => b.onclick = () => {
+        collectHome();
+        homeCfg.categories.splice(parseInt(b.dataset.delCat, 10), 1);
+        drawHome();
+      });
+      document.getElementById('h-addval').onclick = () => {
+        collectHome();
+        homeCfg.values = (homeCfg.values || []).concat([{ icon: '⭐', title: '', body: '' }]);
+        drawHome();
+      };
+      document.querySelectorAll('[data-del-val]').forEach(b => b.onclick = () => {
+        collectHome();
+        homeCfg.values.splice(parseInt(b.dataset.delVal, 10), 1);
+        drawHome();
+      });
+      const fmode = document.getElementById('h-fmode');
+      if (fmode) fmode.onchange = () => {
+        collectHome();
+        drawHome();
+      };
+      // 勾选 checkbox：只更新计数，不重排（保留滚动位置）；改序号才重排表格
+      const manualBox = document.getElementById('h-manual-box');
+      if (manualBox) manualBox.addEventListener('change', e => {
+        const t = e.target;
+        if (!t || !t.getAttribute) return;
+        if (t.getAttribute('data-fslug') != null) { updateSelCount(); return; }
+        if (t.getAttribute('data-forder') != null) { collectHome(); drawHome(); }
+      });
+
+      document.getElementById('h-save').onclick = () => withSaving(document.getElementById('h-save'), async () => {
+        const { ok, error } = await window.Data.saveHomeSettings(collectHome());
+        if (!ok) { console.error('[HQ] saveHomeSettings failed:', error); window.Layout.toast(saveFailMsg(error, '首页')); return; }
+        window.Layout.toast('首页已保存，即时生效');
+        drawHome(); // 重排表格，与已保存顺序一致
+      });
+      document.getElementById('h-reset').onclick = () => withSaving(document.getElementById('h-reset'), async () => {
+        if (!confirm('确认恢复为默认首页内容？当前的修改会被覆盖。')) return;
+        const { ok, error } = await window.Data.saveHomeSettings(window.Data.DEFAULT_HOME);
+        if (!ok) { console.error('[HQ] reset home failed:', error); window.Layout.toast(saveFailMsg(error, '首页')); return; }
+        window.Layout.toast('已恢复默认首页');
+        renderHome();
+      });
+    }
+
+    /* ============================================================
+     *  商品分类（全站唯一数据源）
+     *  一处修改，商品编辑下拉 / 前台筛选条 / 首页分类入口 同步生效
+     * ============================================================ */
+    const catsEl = document.getElementById('cats-panel');
+    let catRows = [];
+    let catProductCount = {};
+
+    async function renderCats() {
+      await reloadCats();
+      let products = [];
+      try { products = await window.Data.getProductsList(); } catch (e) { products = []; }
+      catProductCount = {};
+      (products || []).forEach(p => {
+        const k = p.category || '(未归类)';
+        catProductCount[k] = (catProductCount[k] || 0) + 1;
+      });
+      catRows = CAT_LIST.map(c => ({ ...c }));
+      drawCats();
+    }
+
+    function drawCats() {
+      const rows = catRows.map((c, i) => `
+        <tr data-crow>
+          <td style="text-align:center"><input type="checkbox" data-c="enabled" ${c.enabled === false ? '' : 'checked'}></td>
+          <td style="width:70px"><input data-c="sort_order" type="number" value="${c.sort_order || 0}"></td>
+          <td style="width:70px"><input data-c="emoji" value="${esc(c.emoji)}" placeholder="🍬"></td>
+          <td><input data-c="key" value="${esc(c.key)}" placeholder="spicy-strips"></td>
+          <td><input data-c="label_en" value="${esc(c.label_en)}" placeholder="Spicy Strips"></td>
+          <td><input data-c="label_cn" value="${esc(c.label_cn)}" placeholder="辣条类"></td>
+          <td style="width:80px;text-align:center">${catProductCount[c.key] || 0}</td>
+          <td style="width:70px"><button type="button" class="btn ghost small" data-del-crow="${i}">删除</button></td>
+        </tr>`).join('');
+      catsEl.innerHTML = `
+        <h3 style="margin:0 0 6px">商品分类</h3>
+        <p class="muted" style="margin:0 0 14px;font-size:13px">
+          这里是全站分类的唯一来源。新增/改名/停用后，<strong>商品编辑页的分类下拉、前台 Shop 页筛选条、首页分类入口</strong>都会跟着变。
+          启用状态控制前台是否显示：<strong>已启用</strong>的分类即使暂时没有商品也会出现在前台筛选里（方便你先建好分类再上货）；<strong>取消勾选启用</strong>则前台完全隐藏，但已归到该分类的商品仍正常售卖。
+        </p>
+        <table class="admin">
+          <thead><tr>
+            <th style="width:60px">启用</th><th>排序</th><th>图标</th>
+            <th>分类标识 key</th><th>顾客端英文名</th><th>后台中文名</th>
+            <th style="width:80px">商品数</th><th></th>
+          </tr></thead>
+          <tbody>${rows || '<tr><td colspan="8" class="muted">暂无分类，点下面「添加分类」开始</td></tr>'}</tbody>
+        </table>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
+          <button type="button" class="btn small" id="c-add">+ 添加分类</button>
+          <button type="button" class="btn red small" id="c-save">保存分类</button>
+          <button type="button" class="btn ghost small" id="c-reset">恢复默认四分类</button>
+        </div>
+        <div class="muted" style="font-size:12px;margin-top:10px">
+          说明：key 是英文标识（如 <code>spicy-strips</code>），保存后不要随意改动——改了以后原有商品会失去归类。改名请改「英文名 / 中文名」，不要改 key。
+        </div>`;
+      bindCats();
+    }
+
+    function collectCats() {
+      const rows = Array.prototype.slice.call(catsEl.querySelectorAll('[data-crow]'));
+      catRows = rows.map((r, i) => {
+        const get = f => { const el = r.querySelector('[data-c="' + f + '"]'); return el ? (el.type === 'checkbox' ? el.checked : el.value) : ''; };
+        return {
+          key: String(get('key') || '').trim(),
+          label_en: String(get('label_en') || '').trim(),
+          label_cn: String(get('label_cn') || '').trim(),
+          emoji: String(get('emoji') || '').trim() || '🍬',
+          sort_order: parseInt(get('sort_order'), 10) || (i + 1),
+          enabled: !!get('enabled')
+        };
+      }).filter(c => c.key);
+      return catRows;
+    }
+
+    function bindCats() {
+      document.getElementById('c-add').onclick = () => {
+        collectCats();
+        catRows = catRows.concat([{ key: '', label_en: '', label_cn: '', emoji: '🍬', sort_order: catRows.length + 1, enabled: true }]);
+        drawCats();
+      };
+      catsEl.querySelectorAll('[data-del-crow]').forEach(b => b.onclick = () => {
+        const i = parseInt(b.dataset.delCrow, 10);
+        collectCats();
+        const victim = catRows[i];
+        if (!victim) return;
+        const n = catProductCount[victim.key] || 0;
+        if (n > 0 && !confirm('分类「' + (victim.label_cn || victim.label_en || victim.key) + '」下有 ' + n + ' 个商品。\n删除后这些商品会变成「未归类」，前台分类页将查不到它们（仍可从全部商品进入）。\n确认删除？')) return;
+        catRows.splice(i, 1);
+        drawCats();
+        window.Layout.toast('已移除该行——记得点「保存分类」生效');
+      });
+      document.getElementById('c-save').onclick = () => withSaving(document.getElementById('c-save'), async () => {
+        const list = collectCats();
+        if (!list.length) { window.Layout.toast('至少要保留一个分类'); return; }
+        const seen = {};
+        let dup = '';
+        list.forEach(c => { if (seen[c.key]) dup = c.key; seen[c.key] = 1; });
+        if (dup) { window.Layout.toast('分类 key 重复：' + dup + '，请改一个'); return; }
+        const { ok, error } = await window.Data.saveProductCategories(list);
+        if (!ok) { window.Layout.toast('保存失败：' + (error || '')); return; }
+        await reloadCats();
+        refreshCatSelect(); // 若正在编辑商品，下拉立即更新
+        window.Layout.toast('分类已保存，商品下拉与前台筛选同步生效');
+        renderCats();
+      });
+      document.getElementById('c-reset').onclick = () => withSaving(document.getElementById('c-reset'), async () => {
+        if (!confirm('确认恢复为默认的四个分类？自定义分类会被删除。')) return;
+        const { ok, error } = await window.Data.saveProductCategories(window.Data.DEFAULT_CATEGORIES);
+        if (!ok) { window.Layout.toast('保存失败：' + (error || '')); return; }
+        await reloadCats();
+        refreshCatSelect(); // 若正在编辑商品，下拉立即更新
+        window.Layout.toast('已恢复默认四分类');
+        renderCats();
+      });
+    }
+
+    /* ---------- init ---------- */
+    await reloadCats();
+    showTab('dash');
+  })();
+  </script>
+</body>
+</html>

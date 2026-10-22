@@ -1,0 +1,25 @@
+User-agent: *
+Allow: /
+
+# 账户/后台页不收录
+Disallow: /account.html
+Disallow: /hq-8xk29a.html
+Disallow: /admin.html
+
+# AI / 生成式引擎爬虫（GPT、Bing Copilot、Perplexity、Claude、Google-Extended 等）
+User-agent: GPTBot
+Allow: /
+User-agent: Google-Extended
+Allow: /
+User-agent: ClaudeBot
+Allow: /
+User-agent: PerplexityBot
+Allow: /
+User-agent: OAI-SearchBot
+Allow: /
+User-agent: anthropic-ai
+Allow: /
+User-agent: Applebot
+Allow: /
+
+Sitemap: https://www.uslatiao.com/sitemap.xml

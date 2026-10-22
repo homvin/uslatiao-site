@@ -1,0 +1,304 @@
+[
+  {
+    "slug": "mala-strips-original",
+    "name": "Mala Strips — Original",
+    "subtitle": "Chewy wheat strips in chili oil and ground Sichuan pepper. Numbing, not just hot.",
+    "price": 12.99,
+    "compare_at": null,
+    "category": "spicy-strips",
+    "heat": 4,
+    "tags": [
+      "VEGAN",
+      "10 CT"
+    ],
+    "badge": "HEAT 4/5",
+    "bullets": [
+      "10 individual packs, 2.5 oz each",
+      "Heat 4 of 5 — numbing, savory, not sweet",
+      "Vegan — no meat, no dairy",
+      "6-month shelf life, no refrigeration needed"
+    ],
+    "taste": "Imagine a chewy, springy noodle that's been sitting in chili oil. It's savory first, then the heat builds, and about ten seconds later the Sichuan pepper kicks in and your lips start buzzing. Not sweet. Not smoky. Just oil, chili, garlic, and that tingling numbness. Every strip is cut into short pieces, so you eat it straight from the pack — no plate, no mess.",
+    "how_hot": "Heat 4 of 5. Roughly two notches above Sriracha. If you regularly eat spicy food, this is comfortable. If hot Cheetos are your ceiling, start with the variety pack instead. The burn fades in about five minutes. The numbness sticks around a little longer.",
+    "ingredients": "Wheat flour, water, soybean oil, chili, Sichuan pepper, salt, sugar, spices, soy sauce (contains soy, wheat). Contains: Wheat, Soy. Made in a facility that also handles sesame.",
+    "image": "",
+    "status": "active",
+    "stock": 200,
+    "weight_oz": 3.5,
+    "length_in": 8,
+    "width_in": 6,
+    "height_in": 2,
+    "sku": "",
+    "variants": [
+      {
+        "sku": "MALA-ORIG-10CT",
+        "option_label": "10 CT",
+        "price": 12.99,
+        "compare_at": null,
+        "stock": 200,
+        "weight_oz": 3.5,
+        "length_in": 8,
+        "width_in": 6,
+        "height_in": 2
+      },
+      {
+        "sku": "MALA-ORIG-20CT",
+        "option_label": "20 CT",
+        "price": 21.99,
+        "compare_at": null,
+        "stock": 120,
+        "weight_oz": 6.5,
+        "length_in": 9,
+        "width_in": 6,
+        "height_in": 3
+      }
+    ]
+  },
+  {
+    "slug": "mala-strips-extra-hot",
+    "name": "Mala Strips — Extra Hot",
+    "subtitle": "Same chewy strip, turned all the way up. For people who finished the Original and wanted more.",
+    "price": 12.99,
+    "compare_at": null,
+    "category": "spicy-strips",
+    "heat": 5,
+    "tags": [
+      "VEGAN",
+      "10 CT"
+    ],
+    "badge": "HEAT 5/5",
+    "bullets": [
+      "10 individual packs, 2.5 oz each",
+      "Heat 5 of 5 — for regular spicy-food eaters",
+      "Vegan — no meat, no dairy",
+      "6-month shelf life, no refrigeration needed"
+    ],
+    "taste": "The Original's louder sibling. More chili, more Sichuan pepper, the same springy chew. If Heat 4 was comfortable, this one is a commitment. Keep a drink nearby.",
+    "how_hot": "Heat 5 of 5. Above Sriracha by a wide margin. If hot Cheetos are your ceiling, do not start here — start with the variety pack.",
+    "ingredients": "Wheat flour, water, soybean oil, chili, Sichuan pepper, salt, sugar, spices, soy sauce (contains soy, wheat). Contains: Wheat, Soy. Made in a facility that also handles sesame.",
+    "image": "",
+    "status": "active",
+    "stock": 200,
+    "weight_oz": 3.5,
+    "length_in": 8,
+    "width_in": 6,
+    "height_in": 2,
+    "sku": "",
+    "variants": []
+  },
+  {
+    "slug": "planet-cup-classic",
+    "name": "Planet Cup Classic",
+    "subtitle": "Chocolate-dipped biscuit balls, served in a cup, eaten with a tiny spoon. The spoon is not optional.",
+    "price": 14.99,
+    "compare_at": null,
+    "category": "chocolate-bites",
+    "heat": 0,
+    "tags": [
+      "SWEET",
+      "12 CT"
+    ],
+    "badge": "BEST SELLER",
+    "bullets": [
+      "12 individual cups, each with its own spoon",
+      "Chocolate coating over crispy biscuit balls",
+      "No artificial colors",
+      "9-month shelf life, no refrigeration needed"
+    ],
+    "taste": "It's a small plastic cup holding a layer of chocolate sauce with a mound of tiny crispy biscuit balls on top. You scoop a ball, dip it in the chocolate, and eat it. The biscuit is light and airy, almost like a malt ball without the hard shell. The chocolate is milk chocolate — sweet, not dark, not bitter. Kids tend to eat the balls first and drink the chocolate at the end. Adults tend to mix them together. The whole thing takes about ninety seconds. That's the point.",
+    "how_hot": "",
+    "ingredients": "Sugar, wheat flour, vegetable oil, cocoa powder, milk powder. Contains: Milk, Wheat, Soy.",
+    "image": "",
+    "status": "active",
+    "stock": 200,
+    "weight_oz": 5,
+    "length_in": 6,
+    "width_in": 6,
+    "height_in": 4,
+    "sku": "",
+    "variants": [
+      {
+        "sku": "PLANET-12CT",
+        "option_label": "12 CT",
+        "price": 14.99,
+        "compare_at": null,
+        "stock": 200,
+        "weight_oz": 5,
+        "length_in": 6,
+        "width_in": 6,
+        "height_in": 4
+      },
+      {
+        "sku": "PLANET-24CT",
+        "option_label": "24 CT",
+        "price": 26.99,
+        "compare_at": null,
+        "stock": 80,
+        "weight_oz": 9,
+        "length_in": 8,
+        "width_in": 6,
+        "height_in": 5
+      }
+    ]
+  },
+  {
+    "slug": "wafer-rolls-cocoa",
+    "name": "Cocoa Wafer Rolls",
+    "subtitle": "Thin crispy cocoa wafers rolled around a light cream center. The quiet hero of any care package.",
+    "price": 9.99,
+    "compare_at": null,
+    "category": "chocolate-bites",
+    "heat": 0,
+    "tags": [
+      "SWEET",
+      "UNDER $15"
+    ],
+    "badge": "",
+    "bullets": [
+      "16 rolls per box",
+      "Light cocoa wafer, creamy center",
+      "No artificial colors",
+      "Great for desks and lunchboxes"
+    ],
+    "taste": "A crisp, snappy wafer shell with a smooth cocoa cream inside. Not too sweet. They come individually wrapped, so they survive a backpack.",
+    "how_hot": "",
+    "ingredients": "Wheat flour, sugar, vegetable oil, cocoa powder, milk powder. Contains: Wheat, Milk, Soy.",
+    "image": "",
+    "status": "active",
+    "stock": 200,
+    "weight_oz": 7.1,
+    "length_in": 9,
+    "width_in": 4,
+    "height_in": 3,
+    "sku": "",
+    "variants": []
+  },
+  {
+    "slug": "first-timer-variety-pack",
+    "name": "First-Timer Variety Pack",
+    "subtitle": "Six snacks, heat levels 1 through 5. Find your ceiling before you commit to a case.",
+    "price": 24.99,
+    "compare_at": null,
+    "category": "variety-packs",
+    "heat": 0,
+    "tags": [
+      "STARTER",
+      "MIXED HEAT"
+    ],
+    "badge": "",
+    "bullets": [
+      "6 different snacks in one box",
+      "Heat levels 1 through 5 represented",
+      "Best way to figure out your spice ceiling",
+      "Ships from the US in 1 business day"
+    ],
+    "taste": "One of everything we'd hand a first-time buyer. Two mild, two medium, two hot. By the time the box is empty, you'll know exactly which strip to reorder.",
+    "how_hot": "Spans the full range — Heat 1 to Heat 5. Start at the low end and work up.",
+    "ingredients": "Varies by item. Each snack's allergens are listed on its own page.",
+    "image": "",
+    "status": "active",
+    "stock": 200,
+    "weight_oz": 14,
+    "length_in": 11,
+    "width_in": 8,
+    "height_in": 4,
+    "sku": "",
+    "variants": []
+  },
+  {
+    "slug": "party-bundle",
+    "name": "Party Bundle",
+    "subtitle": "Three bags of strips, two boxes of bites. Built for movie nights and dorm floors.",
+    "price": 39.99,
+    "compare_at": 48.95,
+    "category": "bundles",
+    "heat": 0,
+    "tags": [
+      "BUNDLE",
+      "SAVE 18%"
+    ],
+    "badge": "SAVE 18%",
+    "bullets": [
+      "3 bags of Mala Strips + 2 boxes of chocolate bites",
+      "18% cheaper than buying separately",
+      "Built for sharing",
+      "Ships from the US in 1 business day"
+    ],
+    "taste": "The bundle regulars reorder most. Enough strips to share, enough bites to finish the night. The math works out to about 18% off the single prices.",
+    "how_hot": "Mix of Heat 4 strips and no-heat bites. Adjust to taste.",
+    "ingredients": "See individual product pages for each item's ingredients and allergens.",
+    "image": "",
+    "status": "active",
+    "stock": 3,
+    "weight_oz": 32,
+    "length_in": 14,
+    "width_in": 10,
+    "height_in": 6,
+    "sku": "",
+    "variants": []
+  },
+  {
+    "slug": "kopiko-coffee-candy",
+    "name": "Kopiko Coffee Candy",
+    "subtitle": "Real coffee flavor in a small hard candy. The one that tastes like a real espresso, not sugar.",
+    "price": 6.99,
+    "compare_at": null,
+    "category": "chocolate-bites",
+    "heat": 0,
+    "tags": [
+      "SWEET",
+      "UNDER $15"
+    ],
+    "badge": "",
+    "bullets": [
+      "Individually wrapped",
+      "Real coffee extract",
+      "Under $15",
+      "No refrigeration needed"
+    ],
+    "taste": "A hard candy with an actual coffee bite — bitter-sweet, not syrupy. The thing you palm during a long meeting.",
+    "how_hot": "",
+    "ingredients": "Sugar, glucose, coffee extract, milk powder. Contains: Milk.",
+    "image": "",
+    "status": "active",
+    "stock": 8,
+    "weight_oz": 4.2,
+    "length_in": 5,
+    "width_in": 4,
+    "height_in": 2,
+    "sku": "",
+    "variants": []
+  },
+  {
+    "slug": "spicy-ramen-pack",
+    "name": "Spicy Ramen Pack",
+    "subtitle": "Four packs of mala-style instant ramen. The late-night fix, stocked stateside.",
+    "price": 13.99,
+    "compare_at": null,
+    "category": "spicy-strips",
+    "heat": 3,
+    "tags": [
+      "NEW",
+      "HEAT 3"
+    ],
+    "badge": "NEW",
+    "bullets": [
+      "4 packs per set",
+      "Heat 3 of 5 — friendly heat",
+      "Cooks in 5 minutes",
+      "New this month"
+    ],
+    "taste": "A noodle pack with the same mala spine as our strips — chili oil, Sichuan pepper, a savory broth. Heat 3, so it's the one to hand a nervous first-timer.",
+    "how_hot": "Heat 3 of 5. Mild enough for most people, with a real tingle at the end.",
+    "ingredients": "Wheat noodles, chili oil powder, Sichuan pepper, salt, spices. Contains: Wheat, Soy.",
+    "image": "",
+    "status": "active",
+    "stock": 200,
+    "weight_oz": 9.8,
+    "length_in": 10,
+    "width_in": 7,
+    "height_in": 4,
+    "sku": "",
+    "variants": []
+  }
+]

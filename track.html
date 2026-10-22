@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Track Order — HICHEN Asian Market</title>
+  <link rel="canonical" href="https://www.uslatiao.com/track.html">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="HICHEN Asian Market">
+  <meta property="og:image" content="https://www.uslatiao.com/assets/img/og-cover.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="HICHEN Asian Market - The Spicy Food Lover's Paradise.">
+  <meta name="twitter:image" content="https://www.uslatiao.com/assets/img/og-cover.jpg">
+  <meta property="og:title" content="Track Order — HICHEN Asian Market">
+  <meta property="og:description" content="Track your HICHEN Asian Market order and view shipment status.">
+  <meta property="og:url" content="https://www.uslatiao.com/track.html">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Track Order — HICHEN Asian Market">
+  <meta name="twitter:description" content="Track your HICHEN Asian Market order and view shipment status.">
+  <meta name="description" content="Track your HICHEN Asian Market order and view shipment status.">
+  <link rel="stylesheet" href="assets/css/styles.css?v=42">
+  <script src="https://cdn.jsdelivr.net/npm/@tencent-ai/workbuddy-cloud-sdk@dev/lib/index.global.js"></script>
+</head>
+<body>
+  <div id="site-header"></div>
+  <div class="container page-head"><h1>Track your order</h1></div>
+  <section class="section container" style="padding-top:10px">
+    <div class="form">
+      <div class="note blue">Sign in to see your orders and tracking. Shipment details appear here once we fulfill your order.</div>
+      <div id="t-signin" class="note" style="display:none">Please <a href="account.html">sign in</a> to view your orders.</div>
+      <div id="t-result"></div>
+      <p style="margin-top:18px"><a class="btn ghost" href="account.html">Go to my account →</a></p>
+    </div>
+  </section>
+  <div id="site-footer"></div>
+  <script src="assets/js/config.js?v=15"></script>
+  <script src="assets/js/cloud.js?v=9"></script>
+  <script src="assets/js/store.js?v=8"></script>
+  <script src="assets/js/data.js?v=32"></script>
+  <script src="assets/js/signup.js?v=3"></script><script src="assets/js/layout.js?v=14"></script>
+  <script src="assets/js/app.js?v=7"></script>
+<script src="assets/js/analytics.js?v=1"></script>
+  <script>
+    (async function () {
+      const session = await window.Cloud.getSession();
+      const wrap = document.getElementById('t-result');
+      const signin = document.getElementById('t-signin');
+      if (!session || !session.user) { signin.style.display = 'block'; return; }
+      const orders = await window.Data.getMyOrders(session);
+      if (!orders.length) { wrap.innerHTML = '<p class="muted">You have no orders yet.</p>'; return; }
+      // 售后申请状态（取消审核中 / 已拒绝）——操作入口在 account.html
+      let reqs = [];
+      try { reqs = await window.Data.getMyReturnRequests(window.Cloud.userEmail(session) || ''); } catch (e) { reqs = []; }
+      const reqByOrder = {};
+      reqs.forEach(r => { if (!reqByOrder[r.order_id]) reqByOrder[r.order_id] = r; });
+      wrap.innerHTML = orders.map(o => {
+        const st = o.status || 'pending';
+        const req = reqByOrder[o.id];
+        const reqNote = (req && req.status === 'requested' && st === 'paid')
+          ? '<div class="note" style="margin-top:8px">Cancellation requested — we are reviewing it. You\'ll be refunded in full once approved.</div>'
+          : ((req && req.status === 'rejected' && st === 'paid')
+            ? '<div class="note" style="margin-top:8px">Your cancellation request was declined. <a href="contact.html">Contact us</a> if you have questions.</div>'
+            : '');
+        const trk = o.tracking_no
+          ? `<div class="note blue" style="margin-top:8px">🚚 ${o.carrier||''} · ${o.tracking_no}${o.tracking_url?` · <a href="${o.tracking_url}" target="_blank">Track</a>`:''}${o.shipped_at?` · shipped ${new Date(o.shipped_at).toLocaleDateString()}`:''}</div>`
+          : (st==='shipped'||st==='delivered' ? '<div class="note">Shipment info pending.</div>' : '<div class="muted" style="font-size:13px">Not shipped yet.</div>');
+        const items = (o.items||[]).map(i=>`${i.qty}× ${i.name}`).join(', ');
+        return `<div class="line" style="grid-template-columns:1fr auto"><div><strong>${String(o.id).slice(0,8)}</strong> · ${o.created_at?new Date(o.created_at).toLocaleDateString():''}<br><span class="muted" style="font-size:13px">${items}</span><br><span class="tag">${st}</span>${trk}${reqNote}</div><div style="text-align:right">${window.Money(o.total)}</div></div>`;
+      }).join('');
+    })();
+  </script>
+</body>
+</html>

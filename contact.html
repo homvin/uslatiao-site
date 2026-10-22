@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Contact — HICHEN Asian Market</title>
+  <link rel="canonical" href="https://www.uslatiao.com/contact.html">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="HICHEN Asian Market">
+  <meta property="og:image" content="https://www.uslatiao.com/assets/img/og-cover.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="HICHEN Asian Market - The Spicy Food Lover's Paradise.">
+  <meta name="twitter:image" content="https://www.uslatiao.com/assets/img/og-cover.jpg">
+  <meta property="og:title" content="Contact — HICHEN Asian Market">
+  <meta property="og:description" content="Contact HICHEN Asian Market with questions about orders, ingredients, or flavors.">
+  <meta property="og:url" content="https://www.uslatiao.com/contact.html">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Contact — HICHEN Asian Market">
+  <meta name="twitter:description" content="Contact HICHEN Asian Market with questions about orders, ingredients, or flavors.">
+  <meta name="description" content="Contact HICHEN Asian Market with questions about orders, ingredients, or flavors.">
+  <link rel="stylesheet" href="assets/css/styles.css?v=42">
+  <script src="https://cdn.jsdelivr.net/npm/@tencent-ai/workbuddy-cloud-sdk@dev/lib/index.global.js"></script>
+</head>
+<body>
+  <div id="site-header"></div>
+  <div class="container page-head"><h1>Contact us</h1></div>
+  <section class="section container" style="padding-top:10px">
+    <div class="form">
+      <p class="muted">Questions about an order, an ingredient, or a flavor we should stock? Send a note.</p>
+      <div class="field"><label>Email</label><input id="c-email" type="email" placeholder="you@example.com"></div>
+      <div class="field"><label>Message</label><textarea id="c-msg" rows="5" placeholder="How can we help?"></textarea></div>
+      <button class="btn red" id="c-send">Send</button>
+      <div class="note blue" style="display:none" id="c-note"></div>
+      <p class="muted" style="margin-top:18px">Or email us directly at <strong>support@uslatiao.com</strong> (placeholder — set your real address in config.js).</p>
+    </div>
+  </section>
+  <div id="site-footer"></div>
+  <script src="assets/js/config.js?v=15"></script><script src="assets/js/cloud.js?v=9"></script><script src="assets/js/store.js?v=8"></script>
+  <script src="assets/js/data.js?v=32"></script><script src="assets/js/signup.js?v=3"></script><script src="assets/js/layout.js?v=14"></script><script src="assets/js/app.js?v=7"></script>
+<script src="assets/js/analytics.js?v=1"></script>
+  <script>
+    document.getElementById('c-send').onclick = () => {
+      const email = document.getElementById('c-email').value.trim();
+      const msg = document.getElementById('c-msg').value.trim();
+      if (!email || !msg) { window.Layout.toast('Fill in email and message'); return; }
+      const n = document.getElementById('c-note');
+      n.style.display = 'block';
+      n.textContent = 'Thanks — this is a preview, so nothing was sent. Wire up email in the next step.';
+    };
+  </script>
+</body>
+</html>

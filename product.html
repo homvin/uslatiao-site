@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Product — HICHEN Asian Market</title>
+  <link rel="canonical" href="https://www.uslatiao.com/product.html">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="HICHEN Asian Market">
+  <meta property="og:image" content="https://www.uslatiao.com/assets/img/og-cover.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="HICHEN Asian Market - The Spicy Food Lover's Paradise.">
+  <meta name="twitter:image" content="https://www.uslatiao.com/assets/img/og-cover.jpg">
+  <meta property="og:title" content="Product — HICHEN Asian Market">
+  <meta property="og:description" content="HICHEN Asian Market snack details: taste, heat level, ingredients and allergens.">
+  <meta property="og:url" content="https://www.uslatiao.com/product.html">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Product — HICHEN Asian Market">
+  <meta name="twitter:description" content="HICHEN Asian Market snack details: taste, heat level, ingredients and allergens.">
+  <meta name="description" content="HICHEN Asian Market snack details: taste, heat level, ingredients and allergens.">
+  <link rel="stylesheet" href="assets/css/styles.css?v=42">
+  <script src="https://cdn.jsdelivr.net/npm/@tencent-ai/workbuddy-cloud-sdk@dev/lib/index.global.js"></script>
+</head>
+<body>
+  <div id="site-header"></div>
+
+  <div class="container page-head">
+    <p class="muted" style="margin:0"><a href="shop.html">Shop</a> / <span id="crumb">Product</span></p>
+  </div>
+
+  <section class="section container" style="padding-top:14px">
+    <div class="pdp" id="pdp"></div>
+  </section>
+
+  <section class="section container" style="padding-top:0">
+    <h2 style="font-size:22px;margin-bottom:18px">Customer reviews</h2>
+    <div id="reviews"></div>
+    <div id="review-form" class="summary" style="margin-top:24px;display:none"></div>
+  </section>
+
+  <section class="section container" style="padding-top:0">
+    <h2 style="font-size:22px;margin-bottom:18px">More from this aisle</h2>
+    <div class="grid" id="related"></div>
+  </section>
+
+  <div id="site-footer"></div>
+
+  <script src="assets/js/config.js?v=15"></script>
+  <script src="assets/js/cloud.js?v=9"></script>
+  <script src="assets/js/store.js?v=8"></script>
+  <script src="assets/js/data.js?v=32"></script>
+  <script src="assets/js/signup.js?v=3"></script><script src="assets/js/layout.js?v=14"></script>
+  <script src="assets/js/app.js?v=7"></script>
+<script src="assets/js/analytics.js?v=1"></script>
+  <script src="assets/js/shop.js?v=21"></script>
+  <script>
+    (async function () {
+      const slug = new URLSearchParams(location.search).get('slug');
+      const all = await window.Data.getProducts();
+      const soldCounts = await window.Data.getSoldCounts();
+      window.Shop.setSoldCounts(soldCounts);
+      const p = all.find(x => x.slug === slug);
+      const pdp = document.getElementById('pdp');
+      if (!p) {
+        pdp.innerHTML = `<p class="muted">Product not found. <a href="shop.html">Back to shop</a>.</p>`;
+        return;
+      }
+      // 草稿/已下架：不对顾客展示详情（直接访问也拦）
+      if (p.status === 'draft' || p.status === 'inactive') {
+        pdp.innerHTML = `<p class="muted">This product is not available right now. <a href="shop.html">Browse what's in stock</a>.</p>`;
+        return;
+      }
+      document.getElementById('crumb').textContent = p.name;
+      document.title = p.name + ' — HICHEN Asian Market';
+
+      /* —— SEO: 带 slug 的 canonical/og:url + Product/Breadcrumb 结构化数据 —— */
+      (function () {
+        const base = 'https://www.uslatiao.com';
+        const canUrl = base + '/product.html?slug=' + encodeURIComponent(p.slug);
+        const can = document.querySelector('link[rel="canonical"]');
+        if (can) can.setAttribute('href', canUrl);
+        const og = document.querySelector('meta[property="og:url"]');
+        if (og) og.setAttribute('content', canUrl);
+        const ogT = document.querySelector('meta[property="og:title"]');
+        if (ogT) ogT.setAttribute('content', p.name + ' — HICHEN Asian Market');
+        const twT = document.querySelector('meta[name="twitter:title"]');
+        if (twT) twT.setAttribute('content', p.name + ' — HICHEN Asian Market');
+        const prod = {
+          '@context': 'https://schema.org',
+          '@type': 'Product',
+          name: p.name,
+          description: (p.subtitle || '') + '',
+          url: canUrl,
+          brand: { '@type': 'Brand', name: 'HICHEN Asian Market' },
+          offers: {
+            '@type': 'Offer',
+            price: p.price,
+            priceCurrency: 'USD',
+            availability: (p.stock > 0 ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock'),
+            url: canUrl,
+            itemCondition: 'https://schema.org/NewCondition',
+            // 配送详情：与 shipping.html 政策逐字一致（$35 免邮 / $4.99 平地 / 2-4 工作日）
+            // 这是 Google 商品富媒体摘要（价格+库存+「2 天发货」标签）的必需字段
+            shippingDetails: [
+              {
+                '@type': 'OfferShippingDetails',
+                shippingDestination: { '@type': 'DefinedRegion', addressCountry: 'US' },
+                deliveryTime: {
+                  '@type': 'ShippingDeliveryTime',
+                  handlingTime: { '@type': 'QuantitativeValue', minValue: 0, maxValue: 1, unitCode: 'DAY' },
+                  transitTime: { '@type': 'QuantitativeValue', minValue: 2, maxValue: 4, unitCode: 'DAY' }
+                },
+                shippingRate: { '@type': 'MonetaryAmount', value: '4.99', currency: 'USD' }
+              },
+              {
+                '@type': 'OfferShippingDetails',
+                shippingDestination: { '@type': 'DefinedRegion', addressCountry: 'US' },
+                deliveryTime: {
+                  '@type': 'ShippingDeliveryTime',
+                  handlingTime: { '@type': 'QuantitativeValue', minValue: 0, maxValue: 1, unitCode: 'DAY' },
+                  transitTime: { '@type': 'QuantitativeValue', minValue: 2, maxValue: 4, unitCode: 'DAY' }
+                },
+                shippingRate: { '@type': 'MonetaryAmount', value: '0', currency: 'USD' }
+              }
+            ],
+            // 退货政策：与 shipping.html 一致（30 天、未开封、邮件联系、邮寄退回）
+            hasMerchantReturnPolicy: {
+              '@type': 'MerchantReturnPolicy',
+              applicableCountry: 'US',
+              returnPolicyCategory: 'https://schema.org/MerchantReturnFiniteReturnWindow',
+              merchantReturnDays: 30,
+              returnMethod: 'https://schema.org/MerchantReturnByMail'
+            }
+          }
+        };
+        // 有 SKU 就带上（Google 商品标识符三选一：gtin/mpn/sku——本店无 GTIN，用 SKU）
+        if (p.sku) prod.sku = p.sku;
+        if (p.heat) prod.additionalProperty = { '@type': 'PropertyValue', name: 'Heat level', value: p.heat + ' of 5' };
+        const crumb = {
+          '@context': 'https://schema.org',
+          '@type': 'BreadcrumbList',
+          itemListElement: [
+            { '@type': 'ListItem', position: 1, name: 'Shop', item: base + '/shop.html' },
+            { '@type': 'ListItem', position: 2, name: p.name, item: canUrl }
+          ]
+        };
+        const mk = (id, obj) => {
+          const s = document.createElement('script');
+          s.type = 'application/ld+json'; s.id = id;
+          s.textContent = JSON.stringify(obj); document.head.appendChild(s);
+        };
+        mk('ld-product', prod);
+        mk('ld-crumb', crumb);
+      })();
+
+      const old = p.compare_at ? `<span class="old">${window.Money(p.compare_at)}</span>` : '';
+      const tags = (p.tags || []).map(t => `<span class="tag">${t}</span>`).join(' ');
+      const bullets = (p.bullets || []).map(b => `<li>${b}</li>`).join('');
+      const heat = p.heat ? window.Shop.heatBar(p.heat) : '';
+      // 销量：基数 + 真实订单；0 件不显示（避免 "0 sold" 劝退）
+      const soldText = window.Data.soldOf(p, soldCounts);
+      const soldLine = soldText === '0' ? '' : `<div class="sold">${soldText} sold</div>`;
+      const howHot = p.how_hot ? `<div class="block"><h4>How hot is it, really?</h4><p>${p.how_hot}</p></div>` : '';
+      // 重量与外包装尺寸（美国单位：oz / in）
+      const dims = [+p.length_in || 0, +p.width_in || 0, +p.height_in || 0];
+      const hasDim = dims.some(Boolean);
+      const badge = p.badge ? `<span class="tag">${p.badge}</span> ` : '';
+
+      // 商品规格 / 变体
+      const escH = s => String(s == null ? '' : s).replace(/[<>&"]/g, '');
+      const variants = (p.variants || []).filter(Boolean);
+      let selectedVariant = variants.length ? variants[0] : null;
+      const vLabel = v => (v && v.option_label) ? v.option_label : '';
+      const curPrice = () => (selectedVariant && selectedVariant.price != null) ? selectedVariant.price : p.price;
+      const curOld = () => { const c = (selectedVariant && selectedVariant.compare_at != null) ? selectedVariant.compare_at : p.compare_at; return c ? `<span class="old">${window.Money(c)}</span>` : ''; };
+      const curSku = () => { const s = (selectedVariant && selectedVariant.sku) ? selectedVariant.sku : p.sku; return s ? `<div id="pdp-sku" style="font-size:12px;color:#888;margin:-2px 0 10px;letter-spacing:.3px">SKU: ${String(s).replace(/[<>&"]/g,'')}</div>` : ''; };
+      const curWeight = () => { const w = (selectedVariant && selectedVariant.weight_oz != null) ? selectedVariant.weight_oz : p.weight_oz; return +w || 0; };
+      function specHTML() {
+        const wOz = curWeight();
+        const inner = [wOz ? `Net weight ${wOz} oz (${(wOz / 16).toFixed(2)} lb)` : '', hasDim ? `Box ${dims[0]} × ${dims[1]} × ${dims[2]} in` : ''].filter(Boolean).join(' · ');
+        if (!inner) return '<div id="pdp-spec"></div>';
+        return `<div class="block" id="pdp-spec"><h4>Weight &amp; packaging</h4><p>${inner}</p></div>`;
+      }
+      const spec = specHTML();
+
+      // 产品图（主画廊，可点缩略图切换）+ 详情图（下方画廊）
+      const imgs = (p.images && p.images.length) ? p.images : (p.image ? [p.image] : []);
+      const detailImgs = p.detail_images || [];
+      const galleryHTML = imgs.length
+        ? `<div class="gal-main"><img class="pdp-img" id="gal-big" src="${imgs[0]}" alt="${p.name}"></div>` +
+          (imgs.length > 1 ? `<div class="gal-thumbs">${imgs.map((src, i) => `<img class="gal-thumb${i===0?' sel':''}" src="${src}" data-src="${src}">`).join('')}</div>` : '')
+        : `<div class="main">${window.Shop.emojiFor(p)}<br><span style="font-size:13px;font-weight:700">${p.name}</span></div>`;
+      const detailHTML = detailImgs.length
+        ? `<div class="detail-gal">${detailImgs.map(src => `<img src="${src}" alt="${p.name}">`).join('')}</div>`
+        : '';
+
+      pdp.innerHTML = `
+        <div class="gallery">
+          ${galleryHTML}
+          ${detailHTML}
+        </div>
+        <div>
+          <div style="margin-bottom:10px">${badge}${tags}</div>
+          <h1 style="font-size:30px;margin:0 0 8px;font-weight:840">${p.name}</h1>
+          ${curSku()}
+          <p class="muted" style="margin:0 0 14px">${p.subtitle || ''}</p>
+          <div class="price" id="pdp-price">${window.Money(curPrice())} ${curOld()}</div>
+          ${soldLine}
+          ${variants.length ? `
+          <div class="variants-block">
+            <div class="opt-name" id="opt-name">${escH(p.option_name || 'Option')}: <b id="opt-cur">${escH(vLabel(selectedVariant) || ('Option 1'))}</b></div>
+            <div class="variants" id="pdp-variants">${variants.map((v,i)=>`<button type="button" class="vbtn${i===0?' sel':''}" data-i="${i}">${v.image ? `<img class="vimg" src="${escH(v.image)}" alt="">` : ''}<span class="vlabel">${escH(vLabel(v) || ('Option ' + (i+1)))}</span><span class="vprice">${window.Money(v.price != null ? v.price : p.price)}</span></button>`).join('')}</div>
+          </div>` : ''}
+          ${variants.length ? `<div id="pdp-weight" class="muted" style="font-size:13px;margin:8px 0 0;color:#666">${curWeight() ? ('Net weight: ' + curWeight() + ' oz') : 'Weight: not specified'}</div>` : ''}
+          ${heat}
+          <ul class="bullets">${bullets}</ul>
+          <div class="buy-area" style="display:flex;gap:12px;align-items:center;margin:18px 0">
+            <div class="line qty" style="border:none;padding:0">
+              <button id="minus">−</button>
+              <span id="qty" style="min-width:28px;text-align:center;font-weight:700">1</span>
+              <button id="plus">+</button>
+            </div>
+            <div style="flex:1;display:flex;flex-direction:column;gap:10px">
+              <button class="btn red" id="buy-now">Buy Now — ${window.Money(curPrice())}</button>
+              <button class="btn ghost" id="add" style="width:100%">Add to Cart</button>
+            </div>
+          </div>
+          <div class="block"><h4>Taste</h4><p>${p.taste || '—'}</p></div>
+          ${howHot}
+          <div class="block"><h4>Ingredients &amp; Allergens</h4><p>${p.ingredients || '—'}</p></div>
+          ${spec}
+        </div>`;
+
+      // 产品图缩略图切换
+      const bigEl = document.getElementById('gal-big');
+      if (bigEl) {
+        const thumbs = pdp.querySelectorAll('.gal-thumb');
+        thumbs.forEach(t => t.onclick = () => {
+          bigEl.src = t.dataset.src;
+          thumbs.forEach(x => x.classList.remove('sel'));
+          t.classList.add('sel');
+        });
+      }
+
+      let qty = 1;
+      const qtyEl = document.getElementById('qty');
+      document.getElementById('minus').onclick = () => { if (qty > 1) { qty--; qtyEl.textContent = qty; } };
+      document.getElementById('plus').onclick = () => { qty++; qtyEl.textContent = qty; };
+      // 关键：每次点击时实时取"当前选中"的规格，不能在页面加载时算好存成常量
+      //（否则切换规格后，加购/买now 仍会带上旧规格 —— 结账价格与页面显示不一致）
+      const curVariant = () => selectedVariant ? {
+        sku: selectedVariant.sku || '',
+        option_label: selectedVariant.option_label || '',
+        price: selectedVariant.price,
+        weight_oz: selectedVariant.weight_oz
+      } : null;
+      document.getElementById('add').onclick = () => {
+        window.Store.add(p.slug, qty, curVariant());
+        window.Layout.toast('Added to cart');
+      };
+      // Buy Now：单品直结——只带这一件（规格+数量）去结账，不并进购物车
+      document.getElementById('buy-now').onclick = () => {
+        try {
+          sessionStorage.setItem('uslatiao_buynow', JSON.stringify({
+            slug: p.slug, qty: qty, variant: curVariant()
+          }));
+        } catch (e) {}
+        location.href = 'checkout.html';
+      };
+      // 规格切换：更新价格 / SKU / 加购按钮
+      const vbox = document.getElementById('pdp-variants');
+      if (vbox) {
+        vbox.querySelectorAll('.vbtn').forEach(btn => btn.onclick = () => {
+          const i = parseInt(btn.dataset.i, 10);
+          selectedVariant = variants[i];
+          vbox.querySelectorAll('.vbtn').forEach(x => x.classList.remove('sel'));
+          btn.classList.add('sel');
+          // 维度名当前值
+          const oc = document.getElementById('opt-cur');
+          if (oc) oc.textContent = vLabel(selectedVariant) || ('Option ' + (i + 1));
+          // 规格图片：选中即切换主图
+          if (selectedVariant.image && bigEl) {
+            bigEl.src = selectedVariant.image;
+            thumbs.forEach(x => x.classList.remove('sel'));
+          }
+          const wEl = document.getElementById('pdp-weight');
+          if (wEl) wEl.textContent = curWeight() ? ('Net weight: ' + curWeight() + ' oz') : 'Weight: not specified';
+          const specEl = document.getElementById('pdp-spec');
+          if (specEl) specEl.outerHTML = specHTML();
+          const priceEl = document.getElementById('pdp-price');
+          if (priceEl) priceEl.innerHTML = window.Money(curPrice()) + ' ' + curOld();
+          const skuEl = document.getElementById('pdp-sku');
+          if (skuEl) skuEl.outerHTML = curSku();
+          const buyEl = document.getElementById('buy-now');
+          if (buyEl) buyEl.textContent = 'Buy Now — ' + window.Money(curPrice());
+        });
+      }
+
+      // 同品类推荐
+      const related = all.filter(x => x.category === p.category && x.slug !== p.slug).slice(0, 4);
+      window.Shop.renderGrid(document.getElementById('related'), related.length ? related : all.filter(x => x.slug !== p.slug).slice(0, 4));
+
+      // —— 评价区 ——
+      const reviewsEl = document.getElementById('reviews');
+      const reviewFormEl = document.getElementById('review-form');
+      async function loadReviews() {
+        const allRev = await window.Data.getReviews({ status: 'approved' });
+        const list = (allRev || []).filter(r => r.product_slug === slug);
+        if (!list.length) { reviewsEl.innerHTML = '<p class="muted">No reviews yet — be the first to leave one.</p>'; return; }
+        reviewsEl.innerHTML = list.map(r => {
+          const stars = '★'.repeat(r.rating || 0) + '☆'.repeat(5 - (r.rating || 0));
+          return `<div class="review"><div class="stars">${stars}</div><strong>${r.title || ''}</strong><p class="muted">${r.body || ''}</p><span class="muted" style="font-size:12px">${r.email || ''} · ${r.created_at ? new Date(r.created_at).toLocaleDateString() : ''}</span></div>`;
+        }).join('');
+      }
+      const revSession = await window.Cloud.getSession();
+      if (revSession && revSession.user) {
+        reviewFormEl.style.display = 'block';
+        reviewFormEl.innerHTML = `
+          <h3 style="margin:0 0 10px">Write a review</h3>
+          <div style="display:grid;grid-template-columns:120px 1fr;gap:12px">
+            <div class="field"><label>Rating</label><select id="rv-rating"><option>5</option><option>4</option><option>3</option><option>2</option><option>1</option></select></div>
+            <div class="field"><label>Title</label><input id="rv-title" placeholder="Short headline"></div>
+          </div>
+          <div class="field"><label>Body</label><textarea id="rv-body" rows="3" placeholder="What did you think?"></textarea></div>
+          <button class="btn red small" id="rv-submit">Submit review</button>`;
+        document.getElementById('rv-submit').onclick = async () => {
+          const rating = parseInt(document.getElementById('rv-rating').value) || 5;
+          const title = document.getElementById('rv-title').value.trim();
+          const body = document.getElementById('rv-body').value.trim();
+          const email = window.Cloud.userEmail(revSession) || '';
+          const { ok, error } = await window.Data.saveReview({ product_slug: slug, email, rating, title, body, status: 'pending' });
+          if (!ok) { window.Layout.toast('Failed: ' + (error || '')); return; }
+          window.Layout.toast('Thanks! Your review is pending approval.');
+          reviewFormEl.style.display = 'none';
+        };
+      }
+      loadReviews();
+    })();
+  </script>
+</body>
+</html>

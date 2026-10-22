@@ -1,0 +1,14 @@
+# —— 内部文件：不发布到 Cloudflare Pages ——
+# Cloudflare Pages 会把仓库文件全部公开，部署脚本与内部文档不放进仓库
+deploy/
+docs/
+*.genie
+.workbuddy/
+node_modules/
+*.log
+.DS_Store
+Thumbs.db
+
+# —— 说明 ——
+# 站点本体（*.html / assets/ / products.json）在仓库根目录，Pages 直接发布根目录。
+# 后台 Worker 脚本（deploy/cloudflare-worker.js）只存于 D 盘与 Cloudflare，不入库。

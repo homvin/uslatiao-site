@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HICHEN Asian Market — Asian snacks, already stateside</title>
+  <link rel="canonical" href="https://www.uslatiao.com/index.html">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="HICHEN Asian Market">
+  <meta property="og:image" content="https://www.uslatiao.com/assets/img/og-cover.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="HICHEN Asian Market - The Spicy Food Lover's Paradise.">
+  <meta name="twitter:image" content="https://www.uslatiao.com/assets/img/og-cover.jpg">
+  <meta property="og:title" content="HICHEN Asian Market — Asian snacks, already stateside">
+  <meta property="og:description" content="HICHEN Asian Market - Asian snacks stocked in the US and shipped in 1 business day. Spicy strips, chocolate bites, variety packs and bundles for chili lovers.">
+  <meta property="og:url" content="https://www.uslatiao.com/index.html">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="HICHEN Asian Market — Asian snacks, already stateside">
+  <meta name="twitter:description" content="HICHEN Asian Market - Asian snacks stocked in the US and shipped in 1 business day. Spicy strips, chocolate bites, variety packs and bundles for chili lovers.">
+  <meta name="description" content="HICHEN Asian Market - Asian snacks stocked in the US and shipped in 1 business day. Spicy strips, chocolate bites, variety packs and bundles for chili lovers.">
+  <link rel="stylesheet" href="assets/css/styles.css?v=42">
+  <script src="https://cdn.jsdelivr.net/npm/@tencent-ai/workbuddy-cloud-sdk@dev/lib/index.global.js"></script>
+</head>
+<body>
+  <div id="site-header"></div>
+
+  <div class="trustbar">
+    <div class="container">
+      <span class="t"><i></i>Ships from our US warehouse in 1 business day</span>
+      <span class="t"><i></i>Free shipping over <b>$35</b></span>
+      <span class="t"><i></i>Authentic Asian snacks, stocked stateside</span>
+    </div>
+  </div>
+
+  <section class="section container" style="padding-top:20px">
+    <div class="aisle">
+      <aside class="aisle-nav" id="home-rail"></aside>
+      <div class="aisle-main">
+        <div class="hero-slim" id="home-hero"></div>
+        <div class="promo" id="home-promo"></div>
+        <div class="shelf" id="home-feat"></div>
+        <div class="shelf" id="home-new"></div>
+        <div class="shelf" id="home-cat-shelf"></div>
+        <div class="section" style="padding:0" id="home-values"></div>
+        <div class="section" style="padding:0" id="home-story"></div>
+        <div class="section" style="padding:0" id="home-drop"></div>
+      </div>
+    </div>
+  </section>
+
+  <div id="site-footer"></div>
+
+  <script src="assets/js/config.js?v=15"></script>
+  <script src="assets/js/cloud.js?v=9"></script>
+  <script src="assets/js/store.js?v=8"></script>
+  <script src="assets/js/data.js?v=32"></script>
+  <script src="assets/js/signup.js?v=3"></script><script src="assets/js/layout.js?v=14"></script>
+  <script src="assets/js/app.js?v=7"></script>
+<script src="assets/js/analytics.js?v=1"></script>
+  <script src="assets/js/shop.js?v=21"></script>
+  <script>
+    (async function () {
+      const esc = s => String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      const lines = s => esc(s || '').split('\n').join('<br>');
+
+      // 首页配置：云端优先，读不到时 data.js 内部回退默认值（本地打开也不空）
+      let home;
+      try { home = await window.Data.getHomeSettings(); }
+      catch (e) { home = window.Data.DEFAULT_HOME; }
+      const hero = home.hero || {}, story = home.story || {}, drop = home.drop || {};
+      const catsHead = home.cats_head || {}, featHead = home.feat_head || {}, valuesHead = home.values_head || {};
+      const products = window.Shop.sellable(await window.Data.getProductsFront());
+      window.Shop.setSoldCounts(await window.Data.getSoldCounts());
+
+      /* —— 分类：唯一数据源是「商品分类」表（与商品下拉/Shop 筛选一致），装修配置仅作读库失败时的兜底 —— */
+      const toCat = c => ({ key: c.key, label: c.label || c.label_en || c.key, cn: c.label_cn || '', emoji: c.emoji || '' });
+      let cats = [];
+      try {
+        const list = await window.Data.getProductCategories();
+        cats = list.filter(c => c.enabled !== false).map(toCat);
+      } catch (e) { cats = []; }
+      if (!cats.length) cats = (home.categories || []).map(toCat);
+      const countOf = key => products.filter(p => p.category === key).length;
+      // 前台筛选条：展示所有「启用」的分类（含暂未上货的新分类，让店主能看见/验证）
+      const liveCats = cats.filter(c => c.enabled !== false);
+      // 首页货架：只展示有商品的分类，避免空货架
+      const shelfCats = cats.filter(c => countOf(c.key) > 0);
+
+      /* —— 左栏：Browse aisles + Shop by heat —— */
+      const rail = document.getElementById('home-rail');
+      if (rail) {
+        const hc = band => window.Shop.filterByHeat(products, band).length;
+        rail.innerHTML = `
+          <div class="grp">Browse aisles</div>
+          <a href="shop.html"><span>All snacks</span><span class="n">${products.length}</span></a>
+          ${liveCats.map(c => `<a href="shop.html?cat=${encodeURIComponent(c.key)}" data-cat="${esc(c.key)}"><span>${esc(c.label)}</span><span class="n">${countOf(c.key)}</span></a>`).join('')}
+          <div class="grp">Shop by heat</div>
+          <a href="shop.html?heat=mild"><span>Mild · Heat 1–2</span><span class="n">${hc('mild')}</span></a>
+          <a href="shop.html?heat=medium"><span>Medium · Heat 3</span><span class="n">${hc('medium')}</span></a>
+          <a href="shop.html?heat=hot"><span>Hot · Heat 4–5</span><span class="n">${hc('hot')}</span></a>`;
+      }
+
+      // 广告位 → 跳转链接：分类走 shop.html?cat=，商品走 product.html?slug=，none 不跳转
+      const adHref = a => {
+        if (!a || !a.link_type || a.link_type === 'none' || !a.link_value) return '';
+        if (a.link_type === 'category') return 'shop.html?cat=' + encodeURIComponent(a.link_value);
+        if (a.link_type === 'product') return 'product.html?slug=' + encodeURIComponent(a.link_value);
+        return '';
+      };
+      const adSlotHTML = (a, cls) => {
+        const href = adHref(a);
+        const inner = a && a.image
+          ? `<img class="${cls}-img" src="${esc(a.image)}" alt="${esc(a.label)}" loading="lazy">`
+          : `<div class="${cls}-ph">${esc((a && a.label) || 'Ad')}</div>`;
+        return href
+          ? `<a class="${cls}" href="${href}">${inner}</a>`
+          : `<div class="${cls} ${cls}--static">${inner}</div>`;
+      };
+
+      /* —— 头图：配置了 3 广告位就用广告位，否则回退默认头图 —— */
+      const heroEl = document.getElementById('home-hero');
+      const heroAds = (home.hero_ads || []).filter(a => a && a.image);
+      if (heroEl) {
+        if (heroAds.length) {
+          heroEl.innerHTML = `<div class="ad-grid">${(home.hero_ads || []).slice(0, 3).map(a => adSlotHTML(a, 'ad-slot')).join('')}</div>`;
+        } else {
+          heroEl.innerHTML = `
+          <div class="lt">
+            <span class="eyebrow">${esc(hero.eyebrow)}</span>
+            <h1>${lines(hero.title)}</h1>
+            <p class="lead">${esc(hero.lead)}</p>
+            <div class="badges">${(hero.badges || []).map(b => `<span class="badge">${esc(b)}</span>`).join('')}</div>
+          </div>
+          <div class="cta">
+            <a class="btn red" href="${esc((hero.cta_primary || {}).href || 'shop.html')}">${esc((hero.cta_primary || {}).label)}</a>
+            <a class="btn ghost" href="${esc((hero.cta_secondary || {}).href || 'story.html')}">${esc((hero.cta_secondary || {}).label)}</a>
+          </div>`;
+        }
+      }
+
+      /* —— 促销条：配置了 3 张轮播就用轮播，否则回退 LATIAO10 条 —— */
+      const promo = document.getElementById('home-promo');
+      const promoAds = (home.promo_ads || []).filter(a => a && a.image);
+      if (promo) {
+        if (promoAds.length) {
+          promo.innerHTML = `<div class="car">${(home.promo_ads || []).slice(0, 3).map((a, i) => {
+            const href = adHref(a);
+            const inner = a.image ? `<img class="car-img" src="${esc(a.image)}" alt="${esc(a.label)}" loading="lazy">` : `<div class="car-ph">${esc(a.label || 'Ad')}</div>`;
+            return `<a class="car-slide${i === 0 ? ' on' : ''}" href="${href || '#'}" ${href ? '' : 'onclick="return false"'}>${inner}</a>`;
+          }).join('')}<div class="car-dots">${(home.promo_ads || []).slice(0, 3).map((_, i) => `<button type="button" class="car-dot${i === 0 ? ' on' : ''}" data-ci="${i}" aria-label="slide ${i + 1}"></button>`).join('')}</div></div>`;
+          (function () {
+            const car = promo.querySelector('.car');
+            if (!car) return;
+            const slides = Array.prototype.slice.call(car.querySelectorAll('.car-slide'));
+            const dots = Array.prototype.slice.call(car.querySelectorAll('.car-dot'));
+            if (slides.length < 2) return;
+            let idx = 0, timer = null;
+            const go = n => {
+              idx = (n + slides.length) % slides.length;
+              slides.forEach((s, i) => s.classList.toggle('on', i === idx));
+              dots.forEach((d, i) => d.classList.toggle('on', i === idx));
+            };
+            const next = () => go(idx + 1);
+            const start = () => { if (!timer) timer = setInterval(next, 4000); };
+            const stop = () => { if (timer) { clearInterval(timer); timer = null; } };
+            dots.forEach((d, i) => d.onclick = () => { go(i); stop(); start(); });
+            car.onmouseenter = stop; car.onmouseleave = start;
+            start();
+          })();
+        } else {
+          promo.innerHTML = `
+            <span class="code">LATIAO10</span>
+            <span class="txt">10% off your first order</span>
+            <span class="sub">Use the code at checkout</span>`;
+        }
+      }
+
+      /* —— 货架渲染：显示 n 个；点 Show all 就地展开为最新上传的 20 个 —— */
+      function renderShelfToggle(container, fullList, opts) {
+        if (!container) return;
+        const cap = opts.cap || 5, fullCap = opts.fullCap || 20;
+        let expanded = false;
+        const draw = () => {
+          const shown = expanded ? (fullList || []).slice(0, fullCap) : (fullList || []).slice(0, cap);
+          window.Shop.renderShelf(container, shown, { title: opts.title, cn: opts.cn });
+          const head = container.querySelector('.shelf-head');
+          if (!head) return;
+          const btn = document.createElement('button');
+          btn.className = 'more-btn';
+          btn.type = 'button';
+          btn.textContent = expanded ? 'Show less' : 'Show all →';
+          btn.onclick = () => { expanded = !expanded; draw(); };
+          head.appendChild(btn);
+        };
+        draw();
+      }
+
+      /* —— （1）What people reorder：手动模式用勾选集，最新模式取前 N（Show all 展开为最新 20）—— */
+      const feat = home.featured || {};
+      let featList;
+      if (feat.mode === 'manual') {
+        const bySlug = Object.fromEntries(products.map(p => [p.slug, p]));
+        featList = (feat.slugs || []).map(s => bySlug[s]).filter(Boolean);
+      } else {
+        // 按上架顺序排（products 已是 created_at 升序），取最新在前的 20
+        featList = products.slice().reverse().slice(0, Math.max(feat.count || 8, 1));
+      }
+      renderShelfToggle(document.getElementById('home-feat'), featList, {
+        title: featHead.title || 'What people reorder',
+        cn: featHead.cn || ''
+      });
+
+      /* —— （2）新品上线：最新上传的前 N（Show all 展开为最新 20）—— */
+      const newList = products.slice().reverse();
+      renderShelfToggle(document.getElementById('home-new'), newList, {
+        title: 'New arrivals'
+      });
+
+      /* —— （3）分类货架：首页只挂一个分类，左栏点击就地切换 —— */
+      const catShelfEl = document.getElementById('home-cat-shelf');
+      function renderCatShelf(catKey) {
+        if (!catShelfEl) return;
+        const list = products.filter(p => p.category === catKey);
+        const c = cats.find(x => x.key === catKey) || { label: catKey, cn: '' };
+        window.Shop.renderShelf(catShelfEl, list, {
+          title: c.label,
+          href: 'shop.html?cat=' + encodeURIComponent(catKey)
+        });
+        if (rail) rail.querySelectorAll('[data-cat]').forEach(a => a.classList.toggle('active', a.dataset.cat === catKey));
+      }
+      const defaultCat = (shelfCats[0] || {}).key;
+      if (catShelfEl && defaultCat) {
+        renderCatShelf(defaultCat);
+        if (rail) rail.querySelectorAll('[data-cat]').forEach(a => {
+          a.onclick = e => {
+            e.preventDefault();
+            const k = a.dataset.cat;
+            if (!k) return;
+            renderCatShelf(k);
+            const top = catShelfEl.getBoundingClientRect().top + window.pageYOffset - 90;
+            window.scrollTo({ top: top, behavior: 'smooth' });
+          };
+        });
+      }
+
+      /* —— Why us 优势 —— */
+      const valEl = document.getElementById('home-values');
+      if (valEl) {
+        valEl.innerHTML = `
+          <span class="kicker">${esc(valuesHead.kicker)}</span>
+          <h2>${esc(valuesHead.title)}</h2>
+          <div class="values">${(home.values || []).map(v =>
+            `<div class="value"><div class="ic">${esc(v.icon)}</div><h4>${esc(v.title)}</h4><p>${esc(v.body)}</p></div>`).join('')}</div>`;
+      }
+
+      /* —— 品牌故事 —— */
+      const storyEl = document.getElementById('home-story');
+      if (storyEl) {
+        storyEl.innerHTML = `
+        <div class="story">
+          <div>
+            <span class="kicker">${esc(story.kicker)}</span>
+            <h2>${esc(story.title)}</h2>
+            <p class="muted">${esc(story.body)}</p>
+            <a class="btn ghost" href="story.html" style="margin-top:14px">${esc(story.link_label)}</a>
+          </div>
+        </div>`;
+      }
+
+      /* —— 底部横幅 —— */
+      const dropEl = document.getElementById('home-drop');
+      if (dropEl) {
+        dropEl.innerHTML = `
+        <div class="drop">
+          <div class="lt">
+            <div class="kick">${esc(drop.kicker)}</div>
+            <h3>${esc(drop.title)}</h3>
+            <p>${esc(drop.body)}</p>
+          </div>
+          <a class="btn" href="${esc(drop.href || 'shop.html')}" style="background:#fff;color:var(--ink);border-color:#fff">${esc(drop.cta_label)}</a>
+        </div>`;
+      }
+    })();
+  </script>
+</body>
+</html>

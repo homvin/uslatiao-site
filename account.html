@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>My Account — HICHEN Asian Market</title>
+  <link rel="canonical" href="https://www.uslatiao.com/account.html">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="HICHEN Asian Market">
+  <meta property="og:image" content="https://www.uslatiao.com/assets/img/og-cover.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="HICHEN Asian Market - The Spicy Food Lover's Paradise.">
+  <meta name="twitter:image" content="https://www.uslatiao.com/assets/img/og-cover.jpg">
+  <meta property="og:title" content="My Account — HICHEN Asian Market">
+  <meta property="og:description" content="Sign in to your HICHEN Asian Market account to view orders and track shipments.">
+  <meta property="og:url" content="https://www.uslatiao.com/account.html">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="My Account — HICHEN Asian Market">
+  <meta name="twitter:description" content="Sign in to your HICHEN Asian Market account to view orders and track shipments.">
+  <meta name="description" content="Sign in to your HICHEN Asian Market account to view orders and track shipments.">
+  <link rel="stylesheet" href="assets/css/styles.css?v=42">
+  <script src="https://cdn.jsdelivr.net/npm/@tencent-ai/workbuddy-cloud-sdk@dev/lib/index.global.js"></script>
+</head>
+<body>
+  <div id="site-header"></div>
+
+  <div class="container page-head">
+    <h1>My account</h1>
+  </div>
+
+  <section class="section container" style="padding-top:10px">
+    <!-- 未登录 -->
+    <div id="auth-view" class="form" style="display:none">
+      <div id="step-email">
+        <h2 style="font-size:20px;margin:0 0 6px">Sign in or create an account</h2>
+        <p class="muted" style="margin:0 0 18px">No password needed — we'll email you a code.</p>
+        <div class="field">
+          <label>Email</label>
+          <input type="email" id="email" placeholder="you@example.com" autocomplete="email">
+        </div>
+        <button class="btn red" id="send-code" style="width:100%">Get code</button>
+        <div class="note blue" id="email-note" style="display:none"></div>
+      </div>
+      <div id="step-code" style="display:none">
+        <div class="note green" id="code-sent"></div>
+        <div class="field">
+          <label>6-digit code</label>
+          <input type="text" id="code" inputmode="numeric" maxlength="8" placeholder="123456">
+        </div>
+        <button class="btn red" id="verify" style="width:100%">Verify &amp; enter</button>
+        <button class="btn ghost small" id="back-email" style="width:100%;margin-top:10px">Use a different email</button>
+        <div class="note" id="code-note" style="display:none"></div>
+      </div>
+    </div>
+
+    <!-- 已登录 -->
+    <div id="account-view" style="display:none">
+      <div class="note green" id="welcome"></div>
+      <div style="display:flex;gap:10px;align-items:center;margin:14px 0;flex-wrap:wrap">
+        <a class="btn" id="admin-link" href="hq-8xk29a.html?v=3" style="display:none">⚙️ Store admin</a>
+        <button class="btn ghost" id="signout">Sign out</button>
+      </div>
+      <h2 style="font-size:20px;margin:26px 0 14px">My orders</h2>
+      <div id="orders"></div>
+    </div>
+  </section>
+
+  <div id="site-footer"></div>
+
+  <script src="assets/js/config.js?v=15"></script>
+  <script src="assets/js/cloud.js?v=9"></script>
+  <script src="assets/js/store.js?v=8"></script>
+  <script src="assets/js/data.js?v=32"></script>
+  <script src="assets/js/signup.js?v=3"></script><script src="assets/js/layout.js?v=14"></script>
+  <script src="assets/js/app.js?v=7"></script>
+<script src="assets/js/analytics.js?v=1"></script>
+  <script>
+    (async function () {
+      const authView = document.getElementById('auth-view');
+      const accountView = document.getElementById('account-view');
+      const pending = { email: null, verificationId: null, isExistingUser: false };
+
+      const session = await window.Cloud.getSession();
+      if (session && session.user) showAccount(session);
+      else showAuth();
+
+      function showAuth() {
+        authView.style.display = 'block';
+        accountView.style.display = 'none';
+      }
+
+      async function showAccount(sess) {
+        if (!sess || !sess.user) { showAuth(); return; }
+        authView.style.display = 'none';
+        accountView.style.display = 'block';
+        const name = window.Cloud.displayName(sess);
+        const emailShown = window.Cloud.userEmail(sess)
+          || (function () { try { return sessionStorage.getItem('aa_email') || ''; } catch (e) { return ''; } })();
+        document.getElementById('welcome').textContent = emailShown
+          ? `Signed in as ${emailShown}` + (name ? ` (${name})` : '')
+          : 'Signed in';
+        document.getElementById('admin-link').style.display = window.Cloud.isAdmin(sess) ? '' : 'none';
+
+        // —— 退出登录 ——
+        document.getElementById('signout').onclick = async () => {
+          const btn = document.getElementById('signout');
+          btn.disabled = true; btn.textContent = 'Signing out…';
+          try { sessionStorage.removeItem('aa_email'); } catch (e) {}
+          await window.Cloud.signOut();
+          window.Layout.toast('Signed out');
+          location.reload();
+        };
+
+        const box = document.getElementById('orders');
+        // —— 订单区（含取消申请）：抽成函数，提交申请后整体重渲染 ——
+        async function renderOrders() {
+          let orders = [];
+          try { orders = await window.Data.getMyOrders(sess); } catch (e) { orders = []; }
+          if (!orders.length) {
+            box.innerHTML = `<p class="muted">No orders yet. <a href="shop.html">Start shopping →</a></p>`;
+            return;
+          }
+          // 本人的售后申请（防重复提交 + 状态展示）
+          let reqs = [];
+          try { reqs = await window.Data.getMyReturnRequests(window.Cloud.userEmail(sess) || emailShown); } catch (e) { reqs = []; }
+          const reqByOrder = {};
+          reqs.forEach(r => { if (!reqByOrder[r.order_id]) reqByOrder[r.order_id] = r; });
+
+          box.innerHTML = `<table class="admin"><thead><tr><th>Order</th><th>Date</th><th>Items</th><th>Total</th><th>Status</th><th></th></tr></thead><tbody>` +
+            orders.map(o => {
+              const items = (o.items || []).map(i => `${i.qty}× ${i.name}`).join(', ');
+              const d = o.created_at ? new Date(o.created_at).toLocaleDateString() : '';
+              const req = reqByOrder[o.id];
+              // 取消入口规则：仅「已付款且未发货」；审核中/已拒绝不给重复入口
+              let act = '';
+              let expandable = false;
+              if (o.status === 'paid') {
+                if (req && req.status === 'requested') {
+                  act = `<span class="tag" style="background:#fdf3e3;color:#b5762a">Cancellation requested — reviewing</span>`;
+                } else if (req && req.status === 'rejected') {
+                  act = `<span class="muted" style="font-size:12px">Request declined · <a href="contact.html">Contact us</a></span>`;
+                } else {
+                  act = `<button class="btn ghost small" data-cancel="${o.id}">Cancel order</button>`;
+                  expandable = true;
+                }
+              }
+              const formRow = expandable
+                ? `<tr class="rr-form-row" data-for="${o.id}" style="display:none"><td colspan="6"><div style="padding:10px 4px">
+                    <strong style="font-size:13px">Cancel order ${String(o.id).slice(0, 8)}</strong>
+                    <p class="muted" style="font-size:12.5px;margin:6px 0">Requests within <strong>3 hours of ordering</strong> are reviewed first. Once an order ships it can no longer be cancelled. Approved requests are refunded in full.</p>
+                    <textarea class="rr-reason" rows="2" style="width:100%;max-width:520px;font:inherit;font-size:13px;padding:8px;border:1px solid var(--line);border-radius:8px" placeholder="Tell us why (optional)"></textarea>
+                    <div style="margin-top:8px;display:flex;gap:8px">
+                      <button class="btn red small rr-submit" data-order="${o.id}">Submit request</button>
+                      <button class="btn ghost small rr-close">Keep order</button>
+                    </div>
+                    <p class="rr-msg" style="font-size:12px;margin:6px 0 0;color:#d9442b"></p>
+                  </div></td></tr>`
+                : '';
+              return `<tr><td>${String(o.id).slice(0, 8)}</td><td>${d}</td><td>${items}</td><td>${window.Money(o.total)}</td><td><span class="tag">${o.status}</span></td><td style="text-align:right">${act}</td></tr>` + formRow;
+            }).join('') + `</tbody></table>`;
+
+          box.querySelectorAll('[data-cancel]').forEach(b => {
+            b.onclick = () => {
+              const row = box.querySelector(`.rr-form-row[data-for="${b.dataset.cancel}"]`);
+              if (row) { row.style.display = ''; b.closest('tr').style.display = 'none'; }
+            };
+          });
+          box.querySelectorAll('.rr-close').forEach(b => {
+            b.onclick = () => { renderOrders(); };
+          });
+          box.querySelectorAll('.rr-submit').forEach(b => {
+            b.onclick = async () => {
+              const row = b.closest('.rr-form-row');
+              const order = orders.find(o => o.id === b.dataset.order);
+              const reason = (row.querySelector('.rr-reason').value || '').trim();
+              const msg = row.querySelector('.rr-msg');
+              b.disabled = true; b.textContent = 'Submitting…';
+              try {
+                const r = await window.Data.createReturnRequest(order, reason);
+                if (!r.ok) {
+                  msg.textContent = r.error || 'Could not submit. Please try again.';
+                  b.disabled = false; b.textContent = 'Submit request';
+                  return;
+                }
+                window.Layout.toast('Cancellation request submitted');
+                renderOrders();
+              } catch (e) {
+                msg.textContent = 'Could not submit. Please try again.';
+                b.disabled = false; b.textContent = 'Submit request';
+              }
+            };
+          });
+        }
+        renderOrders();
+      }
+
+      // —— 发送验证码 ——
+      document.getElementById('send-code').onclick = async () => {
+        const email = document.getElementById('email').value.trim();
+        if (!email || !email.includes('@')) { window.Layout.toast('Enter a valid email'); return; }
+        const btn = document.getElementById('send-code');
+        btn.disabled = true; btn.textContent = 'Sending…';
+        const { data, error } = await window.Cloud.sendOtp(email);
+        btn.disabled = false; btn.textContent = 'Get code';
+        const note = document.getElementById('email-note');
+        if (error || !data) {
+          note.style.display = 'block';
+          note.className = 'note red';
+          note.textContent = (error && error.message) ? error.message : 'Could not send code. Please try again.';
+          return;
+        }
+        pending.email = email;
+        try { sessionStorage.setItem('aa_email', email); } catch (e) {}
+        pending.verificationId = data.verificationId;
+        pending.isExistingUser = data.isExistingUser;
+        document.getElementById('step-email').style.display = 'none';
+        document.getElementById('step-code').style.display = 'block';
+        document.getElementById('code-sent').textContent = `We sent a code to ${email}. Check your inbox.`;
+      };
+
+      // —— 验证 ——
+      document.getElementById('verify').onclick = async () => {
+        const token = document.getElementById('code').value.trim();
+        if (!token) { window.Layout.toast('Enter the code'); return; }
+        const btn = document.getElementById('verify');
+        btn.disabled = true; btn.textContent = 'Verifying…';
+        const completed = await window.Cloud.verifyOtp({
+          email: pending.email, verificationId: pending.verificationId,
+          isExistingUser: pending.isExistingUser, token
+        });
+        btn.disabled = false; btn.textContent = 'Verify & enter';
+        const n = document.getElementById('code-note');
+        if (completed.error) {
+          n.style.display = 'block';
+          n.className = 'note red';
+          n.textContent = (completed.error && completed.error.message) ? completed.error.message : 'Invalid or expired code. Try again.';
+          return;
+        }
+        // 统一走 getSession()（内部会向服务器补全邮箱），失败再回退校验接口返回的会话
+        let sess = await window.Cloud.getSession();
+        if (!sess || !sess.user) sess = completed.data || null;
+        if (!sess || !sess.user) {
+          n.style.display = 'block';
+          n.className = 'note red';
+          n.textContent = 'Signed in, but the session could not be read. Please refresh this page.';
+          return;
+        }
+        window.Layout.toast('Welcome!');
+        showAccount(sess);
+        window.App.refreshAccountUI();
+      };
+
+      document.getElementById('back-email').onclick = () => {
+        document.getElementById('step-code').style.display = 'none';
+        document.getElementById('step-email').style.display = 'block';
+      };
+    })();
+  </script>
+</body>
+</html>
