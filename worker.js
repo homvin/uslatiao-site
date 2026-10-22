@@ -196,6 +196,8 @@ async function handleCheckout(request, env, url, reqOrigin) {
 
   const form = {
     mode: 'payment',
+    // 锁定英文收银台：客人全在美国；不锁的话 Stripe 会跟随访客浏览器语言
+    locale: 'en',
     success_url: `${siteUrl}/checkout.html?paid=1&session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${siteUrl}/checkout.html?canceled=1`,
     customer_email: email || undefined,
