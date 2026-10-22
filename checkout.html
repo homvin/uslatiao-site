@@ -178,7 +178,7 @@
       document.getElementById('ck-email').value = window.Cloud.userEmail(session)
         || (function () { try { return sessionStorage.getItem('aa_email') || ''; } catch (e) { return ''; } })();
 
-      const products = window.Shop.sellable(await window.Data.getProducts());
+      const products = window.Shop.sellable(await window.Data.getProductsFront());
       const bySlug = Object.fromEntries(products.map(p => [p.slug, p]));
       const cart = window.Store.get();
 

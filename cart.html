@@ -52,7 +52,7 @@
       const C = window.APP_CONFIG;
       const items = document.getElementById('cart-items');
       const summary = document.getElementById('cart-summary');
-      const products = window.Shop.sellable(await window.Data.getProducts());
+      const products = window.Shop.sellable(await window.Data.getProductsFront());
       const bySlug = Object.fromEntries(products.map(p => [p.slug, p]));
       let cart = window.Store.get();
 

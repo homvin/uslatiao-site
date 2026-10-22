@@ -63,7 +63,7 @@
       const urlHeat = params.get('heat') || 'all';
       const q = (params.get('q') || '').trim();
 
-      const all = window.Shop.sellable(await window.Data.getProducts());
+      const all = window.Shop.sellable(await window.Data.getProductsFront());
       window.Shop.setSoldCounts(await window.Data.getSoldCounts());
       let cats = [{ key: 'all', label: 'All', cn: '' }];
       try {
