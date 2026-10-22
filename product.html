@@ -57,10 +57,17 @@
   <script>
     (async function () {
       const slug = new URLSearchParams(location.search).get('slug');
-      const all = await window.Data.getProducts();
-      const soldCounts = await window.Data.getSoldCounts();
+      // 性能：详情页按 slug 单条取（select * 全量全表曾拖 12MB+ base64 图库，冷启动直接卡死）；
+      // 相关推荐走窄列 getProductsFront（首页同款，仅 ~0.3MB）；三个请求并行。
+      const pdp0 = document.getElementById('pdp');
+      pdp0.innerHTML = '<p class="muted">Loading…</p>';
+      const [p, frontList, soldCounts] = await Promise.all([
+        window.Data.getProductBySlug(slug),
+        window.Data.getProductsFront(),
+        window.Data.getSoldCounts()
+      ]);
       window.Shop.setSoldCounts(soldCounts);
-      const p = all.find(x => x.slug === slug);
+      const all = frontList || [];
       const pdp = document.getElementById('pdp');
       if (!p) {
         pdp.innerHTML = `<p class="muted">Product not found. <a href="shop.html">Back to shop</a>.</p>`;
