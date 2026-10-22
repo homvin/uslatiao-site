@@ -1,0 +1,13 @@
+{
+  // Cloudflare Workers 配置（Git 集成自动部署会读取本文件）
+  // 架构：worker.js 作门童 —— /.cloud/*、/media/*、/api/stripe/* 同源转发到云沙箱，
+  // 其余全部走静态资产（Workers Assets，永不休眠，根治 www 530）。
+  "name": "uslatiao-site",
+  "compatibility_date": "2026-09-01",
+  "main": "worker.js",
+  "assets": {
+    "directory": ".",
+    "binding": "ASSETS",
+    "run_worker_first": true
+  }
+}
