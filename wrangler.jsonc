@@ -9,5 +9,8 @@
     "directory": ".",
     "binding": "ASSETS",
     "run_worker_first": true
-  }
+  },
+  // 关键：允许保留 Cloudflare 面板上添加的运行时变量（如 STRIPE_SECRET_KEY），
+  // 否则每次 wrangler deploy 都会把面板上配置的 vars 清空。
+  "keep_vars": true
 }
