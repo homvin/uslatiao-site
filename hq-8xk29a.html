@@ -730,16 +730,18 @@
         <div class="kpi"><div class="kpi-v">${window.Money(taxTotal)}</div><div class="kpi-l">已收税费</div></div>
         <div class="kpi"><div class="kpi-v" style="color:#b8860b">${window.Money(refundAmt)}</div><div class="kpi-l">已退款</div></div>`;
 
-      // revenue last 14 days
+      // revenue last 14 days（日界按洛杉矶时间切分，与浏览统计一致，避免 UTC/美西错位）
+      const laFmtRev = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit' });
+      const laKeyRev = (ts) => { const o = {}; laFmtRev.formatToParts(new Date(ts)).forEach(x => { o[x.type] = x.value; }); return o.year + '-' + o.month + '-' + o.day; };
       const days = [], revByDay = {};
       const now = new Date();
       for (let i = 13; i >= 0; i--) {
         const d = new Date(now); d.setDate(now.getDate() - i);
-        const key = d.toISOString().slice(0,10);
+        const key = laKeyRev(d);
         days.push(key.slice(5)); revByDay[key] = 0;
       }
       (paidish||[]).forEach(o => {
-        const k = (o.created_at||'').slice(0,10);
+        const k = laKeyRev(o.created_at);
         if (k in revByDay) revByDay[k] += (+o.total || 0);
       });
       drawLine('chart-revenue', days, Object.values(revByDay));
@@ -868,20 +870,24 @@
       }
       const now = new Date();
       // 日界统一按「美国洛杉矶时间」切分（店铺面向美区，老板要看的是美西当天，而非 UTC 或浏览器本地时区）
+      // ⚠️ created_at 是 UTC 时间戳，不能直接 slice(0,10)（那是 UTC 日期，与美西日期错位 7-8 小时：
+      //    美西 17:00 后的访问会被算进"明天"，"今日"数字提前冻结）。必须整条时间戳转美西日期再分桶。
+      const laFmt = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit' });
       const dayKey = (d) => {
-        const p = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(d);
-        const o = {}; p.forEach(x => { o[x.type] = x.value; });
+        const o = {}; laFmt.formatToParts(d).forEach(x => { o[x.type] = x.value; });
         return o.year + '-' + o.month + '-' + o.day;
       };
+      // 每条浏览记录按「完整时间戳 → 美西日期」分桶
+      const kOf = (ts) => { try { return dayKey(new Date(ts)); } catch (e) { return String(ts || '').slice(0, 10); } };
       const todayKey = dayKey(now);
 
-      const todays = views.filter(v => (v.created_at || '').slice(0, 10) === todayKey);
+      const todays = views.filter(v => kOf(v.created_at) === todayKey);
       const todayPV = todays.filter(v => v.event === 'pageview').length;
       const todayUV = new Set(todays.map(v => v.session_id)).size;
 
       const allSess = new Set(views.map(v => v.session_id));
       const d7 = new Date(now); d7.setDate(now.getDate() - 6);
-      const uv7 = new Set(views.filter(v => (v.created_at || '').slice(0, 10) >= dayKey(d7)).map(v => v.session_id)).size;
+      const uv7 = new Set(views.filter(v => kOf(v.created_at) >= dayKey(d7)).map(v => v.session_id)).size;
 
       // 新/老客：按会话去重取首条 new_visitor（埋点已保证同会话一致）
       const sessNV = {};
@@ -908,7 +914,7 @@
       // 近 14 天 PV & UV
       const days = [], pvBy = {}, sessBy = {};
       for (let i = 13; i >= 0; i--) { const d = new Date(now); d.setDate(now.getDate() - i); const k = dayKey(d); days.push(k.slice(5)); pvBy[k] = 0; sessBy[k] = {}; }
-      views.forEach(v => { const k = (v.created_at || '').slice(0, 10); if (k in pvBy && v.event === 'pageview') { pvBy[k]++; sessBy[k][v.session_id] = 1; } });
+      views.forEach(v => { const k = kOf(v.created_at); if (k in pvBy && v.event === 'pageview') { pvBy[k]++; sessBy[k][v.session_id] = 1; } });
       drawDualLine('chart-ana-trend', days, Object.values(pvBy), Object.keys(sessBy).map(k => Object.keys(sessBy[k]).length));
 
       // 来源 / 设备 / 明细榜：均按「洛杉矶当天」的 pageview 统计
