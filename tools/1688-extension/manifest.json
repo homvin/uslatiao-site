@@ -1,23 +1,33 @@
 {
   "manifest_version": 3,
   "name": "USLATIAO 1688 采集",
-  "version": "1.0.0",
-  "description": "在 1688 商品页一键采集商品，推送成 USLATIAO 后台草稿",
-  "permissions": ["storage", "activeTab"],
+  "version": "1.1.0",
+  "description": "在 1688 商品页一键采集商品（含图片转存），打开 USLATIAO 后台一键导入为草稿",
+  "permissions": ["storage", "unlimitedStorage", "activeTab"],
   "host_permissions": [
     "https://detail.1688.com/*",
     "https://*.1688.com/*",
     "https://*.alicdn.com/*",
-    "https://www.uslatiao.com/*"
+    "https://*.taobaocdn.com/*",
+    "https://www.uslatiao.com/*",
+    "https://uslatiao-store.app.workbuddy.host/*"
   ],
   "action": {
     "default_title": "USLATIAO 采集设置",
     "default_popup": "options.html"
   },
+  "background": {
+    "service_worker": "background.js"
+  },
   "content_scripts": [
     {
       "matches": ["https://detail.1688.com/offer/*.html"],
       "js": ["content.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://www.uslatiao.com/*", "https://uslatiao-store.app.workbuddy.host/*"],
+      "js": ["hq-bridge.js"],
       "run_at": "document_idle"
     }
   ]
