@@ -408,6 +408,25 @@ window.Data = (function () {
     return { ok: true };
   }
 
+  // 删除所有「未付款」（pending）订单。
+  // 这类单从未收款，留着只会污染「待发货」统计与导出；paid/shipped/delivered 均已收款，绝不在此删除。
+  // 仅管理员 HQ 上下文可调用（orders 表 DELETE 走 is_admin 策略）。
+  async function deletePendingOrders() {
+    const database = db();
+    if (database) {
+      try {
+        const { data, error } = await database.from('orders').delete().eq('status', 'pending').select('id');
+        if (error) return { ok: false, error: error.message, count: 0 };
+        return { ok: true, count: Array.isArray(data) ? data.length : 0 };
+      } catch (e) { return { ok: false, error: String(e), count: 0 }; }
+    }
+    // 本地兜底（无数据库时清本地 pending）
+    const before = localOrders();
+    const kept = before.filter(o => (o.status || 'pending') !== 'pending');
+    localStorage.setItem(LOCAL_ORDERS, JSON.stringify(kept));
+    return { ok: true, count: before.length - kept.length };
+  }
+
   /* —— 售后申请（取消/退货审核流，2026-10-22） ——
    * 规则：已付款未发货可申请取消；下单 ≤3h 的申请后台标绿优先处理；
    * 已发货/已送达不提供申请入口；审核通过才由管理员把订单置 refunded。
@@ -1348,7 +1367,7 @@ window.Data = (function () {
     getPageViews,
     uploadMedia,
     getDiscounts, saveDiscount, deleteDiscount, validateDiscount,
-    createOrder, getMyOrders, getAllOrders, updateOrder,
+    createOrder, getMyOrders, getAllOrders, updateOrder, deletePendingOrders,
     getReviews, saveReview, updateReview, deleteReview,
     refundOrder, discountAnalytics, getCustomers,
     createReturnRequest, getReturnRequests, updateReturnRequest, getMyReturnRequests,

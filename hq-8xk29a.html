@@ -135,6 +135,10 @@
 
       <!-- ============ ORDERS ============ -->
       <div id="panel-orders" style="display:none">
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
+          <button class="btn red small" id="del-pending">🗑 删除未付款订单</button>
+          <span class="muted" style="font-size:12px">仅删除 status=pending（从未收款）的订单，已付款/已发货/已送达不受影响。操作不可恢复。</span>
+        </div>
         <div id="order-filters" class="filter-row"></div>
         <div id="order-list"></div>
       </div>
@@ -219,7 +223,7 @@
   <script src="assets/js/config.js?v=14"></script>
   <script src="assets/js/cloud.js?v=9"></script>
   <script src="assets/js/store.js?v=8"></script>
-  <script src="assets/js/data.js?v=32"></script>
+  <script src="assets/js/data.js?v=33"></script>
   <script src="assets/js/layout.js?v=11"></script>
   <script src="assets/js/app.js?v=7"></script>
   <script src="assets/js/shop.js?v=21"></script>
@@ -991,21 +995,28 @@
       drawBar('chart-ana-products', prArr.map(x => x[0]), prArr.map(x => x[1]));
     }
 
-    // 导出
+    // 导出（仅已付款口径：paid/shipped/delivered；pending 未付款、cancelled/refunded 不计入）
     document.getElementById('exp-orders').onclick = async () => {
-      const orders = await window.Data.getAllOrders();
-      const rows = [['单号','日期','邮箱','商品','规格','小计','折扣','运费','税费','合计','退款','状态','物流单号',
+      const [orders, products] = await Promise.all([window.Data.getAllOrders(), window.Data.getProductsList().catch(()=>[])]);
+      const PAIDISH = ['paid','shipped','delivered'];
+      // 商品基准 SKU 表：订单行若无变体 SKU，则回退到该商品的基准 sku
+      const skuBySlug = {};
+      (products||[]).forEach(p => { if (p && p.slug) skuBySlug[p.slug] = p.sku || ''; });
+      const rows = [['单号','日期','邮箱','商品','规格','SKU','小计','折扣','运费','税费','合计','退款','状态','物流单号',
                      '收件人','地址','城市','州','邮编','电话','收款方式','支付单号']];
-      (orders||[]).forEach(o => rows.push([
-        String(o.id).slice(0,8), o.created_at||'', o.email||'',
-        (o.items||[]).map(i=>i.qty+'x '+i.name).join('; '),
-        (o.items||[]).map(i=>i.variant_label||'').join('; '),
-        o.subtotal, o.discount_amount||0, o.shipping, o.tax||0, o.total, o.refund_amount||0, o.status, o.tracking_no||'',
-        o.ship_name||'', o.ship_addr||'', o.ship_city||'', o.ship_state||'', o.ship_zip||'', o.phone||'',
-        o.payment_provider||'', o.payment_ref||''
-      ]));
+      (orders||[])
+        .filter(o => PAIDISH.includes(o.status))
+        .forEach(o => rows.push([
+          String(o.id).slice(0,8), o.created_at||'', o.email||'',
+          (o.items||[]).map(i=>i.qty+'x '+i.name).join('; '),
+          (o.items||[]).map(i=>i.variant_label||'').join('; '),
+          (o.items||[]).map(i=>(i.variant_sku || skuBySlug[i.slug] || '')).join('; '),
+          o.subtotal, o.discount_amount||0, o.shipping, o.tax||0, o.total, o.refund_amount||0, o.status, o.tracking_no||'',
+          o.ship_name||'', o.ship_addr||'', o.ship_city||'', o.ship_state||'', o.ship_zip||'', o.phone||'',
+          o.payment_provider||'', o.payment_ref||''
+        ]));
       downloadCSV('uslatiao-orders.csv', toCSV(rows));
-      window.Layout.toast('订单已导出');
+      window.Layout.toast('已导出 ' + (rows.length - 1) + ' 笔已付款订单');
     };
     document.getElementById('exp-products').onclick = async () => {
       const products = await window.Data.getProductsList();
@@ -1557,6 +1568,18 @@
       if (!ok) { window.Layout.toast('操作失败：' + (error||'')); return; }
       window.Layout.toast('已发货'); renderOrders('all');
     }
+
+    // 删除所有未付款（pending）订单：二次确认 + 调用 data.deletePendingOrders
+    const delPendingBtn = document.getElementById('del-pending');
+    if (delPendingBtn) delPendingBtn.onclick = async () => {
+      if (!confirm('确认删除所有「未付款」订单？\n只删 status=pending（从未收款）的订单，已付款/已发货/已送达不受影响。\n此操作不可恢复！')) return;
+      delPendingBtn.disabled = true; const old = delPendingBtn.innerHTML; delPendingBtn.innerHTML = '<span class="spin"></span>删除中…';
+      const r = await window.Data.deletePendingOrders();
+      delPendingBtn.disabled = false; delPendingBtn.innerHTML = old;
+      if (!r.ok) { window.Layout.toast('删除失败：' + (r.error || '')); return; }
+      window.Layout.toast('已删除 ' + (r.count || 0) + ' 笔未付款订单');
+      renderOrders('all');
+    };
 
     /* ============================================================
      *  MARKETING (discount codes + ROI)
