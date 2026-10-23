@@ -4,9 +4,22 @@
  * 有 host_permissions，在扩展上下文 fetch 不受页面 CORS 限制。
  * ========================================================================= */
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  // —— 图片下载：content script 无 chrome.downloads，必须由后台（有完整权限）执行 ——
+  if (msg && msg.type === 'USL_DOWNLOAD' && msg.url && msg.filename) {
+    try {
+      chrome.downloads.download({ url: msg.url, filename: msg.filename, conflictAction: 'overwrite', saveAs: false }, (id) => {
+        const le = chrome.runtime.lastError;
+        if (le) sendResponse({ ok: false, err: le.message });
+        else if (id === undefined) sendResponse({ ok: false, err: 'no_download_id' });
+        else sendResponse({ ok: true });
+      });
+    } catch (e) { sendResponse({ ok: false, err: String(e && e.message || e) }); }
+    return true; // 异步 sendResponse
+  }
+  // —— 图片转 base64（保留备用，当前流程未用）——
   if (msg && msg.type === 'USL_FETCH_IMAGE' && msg.url) {
     fetchAndEncode(msg.url).then(sendResponse).catch(e => sendResponse({ ok: false, error: String(e && e.message || e) }));
-    return true; // 异步 sendResponse
+    return true;
   }
 });
 

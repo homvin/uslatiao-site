@@ -134,7 +134,9 @@
     `;
     document.body.appendChild(panel);
 
-    const msg = () => $('#usl-msg');
+    // 缓存元素引用：面板关闭后引用仍可用（detached DOM），避免 null.style 报错
+    const msgEl = $('#usl-msg');
+    const msg = () => msgEl;
     $('#usl-close').onclick = () => panel.remove();
     $('#usl-send').onclick = async () => {
       const name = $('#usl-name').value.trim();
@@ -154,14 +156,16 @@
       // 直接用 Chrome 下载根目录（主人已设为 D:\uslatiao-import），不再嵌套同名子文件夹；纯 ASCII 文件名避免中文路径静默失败
       const folder = slug + '_' + ts;
       const extOf = (u) => { const m = u.match(/\.(jpg|jpeg|png|webp|gif)(?:[?#]|$)/i); return m ? m[1].toLowerCase().replace('jpeg', 'jpg') : 'jpg'; };
+      // 下载必须走扩展后台（chrome.downloads 仅后台可用），经消息转发
       const downloadOne = (url, file) => new Promise(res => {
         let settled = false;
         const done = (r) => { if (!settled) { settled = true; res(r); } };
-        setTimeout(() => done({ ok: false, err: 'timeout：Chrome 3 秒内没有响应下载请求' }), 3000);
+        setTimeout(() => done({ ok: false, err: 'timeout：扩展后台 5 秒无响应' }), 5000);
         try {
-          chrome.downloads.download({ url: url, filename: file, conflictAction: 'overwrite', saveAs: false }, () => {
+          chrome.runtime.sendMessage({ type: 'USL_DOWNLOAD', url: url, filename: file }, (out) => {
             const le = chrome.runtime.lastError;
-            done(le ? { ok: false, err: le.message } : { ok: true });
+            if (le) return done({ ok: false, err: le.message });
+            done(out && out.ok ? { ok: true } : { ok: false, err: (out && out.err) || 'unknown' });
           });
         } catch (e) { done({ ok: false, err: String(e && e.message || e) }); }
       });
