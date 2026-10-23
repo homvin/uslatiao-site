@@ -1,8 +1,12 @@
 /* =========================================================================
  * USLATIAO 采集扩展 · 后台桥接
- * 注入 HQ 后台页面：读取扩展本地草稿（chrome.storage.local），
- * 用主人已登录的管理员会话把草稿入库（uploadMedia + saveProduct）。
- * 零服务端密钥：RLS 走 is_admin，天然合规。
+ * 注入 HQ 后台页面：读取扩展本地草稿（chrome.storage.local），一键导入。
+ *
+ * 关键架构（v1.2.1）：content script 与页面 JS 处于两个隔离世界——
+ * content script 看不到页面的 window.Data。因此导入逻辑以 <script> 标签
+ * 注入页面主世界执行（在那里 window.Data.saveProduct 可用），执行结果
+ * 通过 CustomEvent('usl-import-result') 传回 content script 更新 UI。
+ * 图片不进服务器：草稿不含图，导入后主人手动上传本地图片。
  * ========================================================================= */
 (function () {
   // 只在后台页生效，前台页面不弹条
@@ -13,18 +17,6 @@
 
   function toast(s) {
     try { window.Layout && window.Layout.toast(s); } catch (e) { console.log('[USLATIAO]', s); }
-  }
-
-  function slugify(s) {
-    return String(s || '').toLowerCase()
-      .replace(/[^a-z0-9\u4e00-\u9fa5]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .slice(0, 48) || 'item';
-  }
-
-  function waitForData(cb) {
-    if (window.Data && window.Cloud) return cb();
-    setTimeout(() => waitForData(cb), 200);
   }
 
   async function readDrafts() {
@@ -38,7 +30,7 @@
   function ensureBanner(n) {
     if (banner) banner.remove();
     banner = document.createElement('div');
-    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:999999;display:flex;align-items:center;gap:12px;' +
+    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:2147483000;display:flex;align-items:center;gap:12px;' +
       'padding:10px 16px;background:#12271f;color:#f5f1ea;font:14px/1.4 system-ui,sans-serif;box-shadow:0 2px 10px rgba(0,0,0,.25)';
     banner.innerHTML =
       '<span>📦 发现 <b>' + n + '</b> 条 1688 采集草稿</span>' +
@@ -57,77 +49,75 @@
     banner.querySelector('[data-act="import"]').onclick = importAll;
   }
 
+  // —— 页面主世界执行的导入函数（在那里才看得到 window.Data）——
+  function uslImportMain(drafts) {
+    const results = [];
+    const finish = (extra) => {
+      window.dispatchEvent(new CustomEvent('usl-import-result', { detail: Object.assign({ results: results }, extra || {}) }));
+    };
+    if (!window.Data || typeof window.Data.saveProduct !== 'function') { finish({ error: 'page_not_ready' }); return; }
+    (async () => {
+      for (const d of (drafts || [])) {
+        try {
+          const p = d.product || {};
+          const slug = (String(p.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'item') + '-' + Date.now().toString(36).slice(-4);
+          const row = {
+            slug: slug,
+            name: p.name || 'Untitled',
+            price: p.price || 0,
+            compare_at: p.compare_at || null,
+            weight_oz: p.weight_oz || null,
+            category: p.category || 'spicy-strips',
+            status: 'draft',
+            sku: slug.toUpperCase().slice(0, 24),
+            image: '', images: [], detail_images: []
+          };
+          const r = await window.Data.saveProduct(row);
+          results.push({ id: d.id, ok: !!(r && r.ok), err: (r && r.error) || '' });
+        } catch (e) { results.push({ id: d.id, ok: false, err: String(e && e.message || e) }); }
+      }
+      finish();
+    })();
+  }
+
   async function importAll() {
     const tip = banner.querySelector('[data-role="tip"]');
     const btn = banner.querySelector('[data-act="import"]');
-    if (!window.Data) {
-      tip.textContent = '后台页面还没加载完成，请按 F5 刷新本页后再点导入';
-      return;
-    }
     btn.disabled = true;
+    tip.textContent = '导入中…';
     const drafts = await readDrafts();
     if (!drafts.length) { banner.remove(); return; }
 
-    let okN = 0, failN = 0;
-    const remain = [];
-    for (let i = 0; i < drafts.length; i++) {
-      const d = drafts[i];
-      tip.textContent = '导入中 ' + (i + 1) + '/' + drafts.length + '：' + ((d.product && d.product.name) || '').slice(0, 16) + '…';
-      try {
-        const row = await buildRow(d);
-        const r = await window.Data.saveProduct(row);
-        if (r && r.ok) okN++; else { failN++; remain.push(d); tip.textContent = '失败：' + ((r && r.error) || ''); }
-      } catch (e) {
-        failN++; remain.push(d);
-        const m = String(e && e.message || e);
-        tip.textContent = m.indexOf('42501') >= 0 || /permission|row-level/i.test(m)
-          ? '权限不足：请先登录后台管理员账号，再点导入'
-          : '导入失败：' + m;
+    const handler = (e) => {
+      window.removeEventListener('usl-import-result', handler);
+      const det = e.detail || {};
+      if (det.error === 'page_not_ready') {
+        tip.textContent = '后台数据层还没就绪：请等「商品列表」完全显示出来后，再点一次导入';
+        btn.disabled = false; return;
       }
-    }
-    await writeDrafts(remain);
-    tip.textContent = '完成：成功 ' + okN + ' 条' + (failN ? '，失败 ' + failN + ' 条（草稿保留，可重试）' : '');
-    if (okN && !failN) {
-      toast('已导入 ' + okN + ' 条采集草稿（图片请在后台商品编辑手动上传），页面即将刷新');
-      setTimeout(() => location.reload(), 1200);
-    } else if (okN) {
-      btn.disabled = false;
-      btn.textContent = '重试失败的';
-    } else {
-      btn.disabled = false;
-    }
-  }
+      const results = det.results || [];
+      const okIds = results.filter(r => r.ok).map(r => r.id);
+      const firstErr = (results.find(r => !r.ok) || {}).err || '';
+      writeDrafts(drafts.filter(d => okIds.indexOf(d.id) === -1));
+      if (okIds.length && !firstErr) {
+        tip.textContent = '完成：成功导入 ' + okIds.length + ' 条，页面即将刷新';
+        toast('已导入 ' + okIds.length + ' 条采集草稿（图片请在后台商品编辑手动上传）');
+        setTimeout(() => location.reload(), 1200);
+      } else if (okIds.length) {
+        tip.textContent = '成功 ' + okIds.length + ' 条，失败 ' + (results.length - okIds.length) + ' 条：' + firstErr;
+        btn.disabled = false; btn.textContent = '重试失败的';
+      } else {
+        tip.textContent = '导入失败：' + (firstErr || '未知错误');
+        btn.disabled = false;
+      }
+    };
+    window.addEventListener('usl-import-result', handler);
 
-  async function buildRow(d) {
-    const p = d.product || {};
-    const slug = slugify(p.name) + '-' + Date.now().toString(36).slice(-4);
-    const row = {
-      slug: slug,
-      name: p.name || 'Untitled',
-      price: p.price || 0,
-      compare_at: p.compare_at || null,
-      weight_oz: p.weight_oz || null,
-      category: p.category || 'spicy-strips',
-      status: 'draft',
-      source_url: d.source_url || '',
-      sku: slug.toUpperCase().slice(0, 24),
-      image: '',
-      images: [],
-      detail_images: []
-    };
-    const up = async (uri) => {
-      if (!uri) return '';
-      if (/^(https?:\/\/|\/media\/)/i.test(uri)) return uri;
-      try { return await window.Data.uploadMedia(uri, 'product'); } catch (e) { return ''; }
-    };
-    const imgs = [];
-    for (const uri of (p.images || [])) { const u = await up(uri); if (u) imgs.push(u); }
-    const det = [];
-    for (const uri of (p.detail_images || [])) { const u = await up(uri); if (u) det.push(u); }
-    row.image = imgs[0] || '';
-    row.images = imgs;
-    row.detail_images = det;
-    return row;
+    // 把导入函数注入页面主世界执行（携带草稿数据），结果经事件传回
+    const s = document.createElement('script');
+    s.textContent = '(' + uslImportMain.toString() + ')(' + JSON.stringify(drafts.map(d => ({ id: d.id, product: d.product }))) + ');';
+    (document.head || document.documentElement).appendChild(s);
+    s.remove();
   }
 
   // 立即读草稿并弹条幅：不等后台框架加载（后台白屏时也能看到草稿提示）
