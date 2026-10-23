@@ -138,13 +138,16 @@
       btn.disabled = true; btn.textContent = '保存中…';
 
       // —— 图片下载到本地（不进服务器，主人自行挑选上传）——
-      const slug = (name.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 24) || 'item') + '-' + Date.now().toString(36).slice(-4);
+      const slug = (name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 20) || 'item') + '-' + Date.now().toString(36).slice(-4);
       const ts = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 12);
-      // 直接用 Chrome 下载根目录（主人已设为 D:\uslatiao-import），不再嵌套同名子文件夹
+      // 直接用 Chrome 下载根目录（主人已设为 D:\uslatiao-import），不再嵌套同名子文件夹；纯 ASCII 文件名避免中文路径静默失败
       const folder = slug + '_' + ts;
       const extOf = (u) => { const m = u.match(/\.(jpg|jpeg|png|webp|gif)(?:[?#]|$)/i); return m ? m[1].toLowerCase().replace('jpeg', 'jpg') : 'jpg'; };
       const downloadOne = (url, file) => new Promise(res => {
-        chrome.downloads.download({ url: url, filename: file, conflictAction: 'overwrite', saveAs: false }, () => res(chrome.runtime.lastError ? false : true));
+        chrome.downloads.download({ url: url, filename: file, conflictAction: 'overwrite', saveAs: false }, () => {
+          const le = chrome.runtime.lastError;
+          res(le ? { ok: false, err: le.message } : { ok: true });
+        });
       });
 
       // 先存草稿（不等图片），点一下立即完成
@@ -175,11 +178,11 @@
 
       // 图片全部并行后台下载（不阻塞操作），每完成一张更新计数
       const all = imageUrls.map(u => [u, 'main']).concat(detailUrls.map(u => [u, 'detail']));
-      let okN = 0, failN = 0;
+      let okN = 0, failN = 0, firstErr = '';
       const upd = () => {
         if (okN + failN >= all.length && okN === 0) {
           msg().style.color = '#d9442b';
-          msg().textContent = '图片全部下载失败。请按 Ctrl+J 打开 Chrome「下载记录」查看原因（多半是下载位置没改、或图床拦截）；商品草稿已存好，不影响去后台导入。';
+          msg().textContent = '图片全部下载失败' + (firstErr ? '：' + firstErr : '') + '。请按 Ctrl+J 看 Chrome「下载记录」红色条目，把原因发我。';
           return;
         }
         msg().style.color = '#0f6e56';
@@ -188,8 +191,8 @@
       upd();
       btn.textContent = '已保存草稿 ✓';
       all.forEach((pair, i) => {
-        downloadOne(pair[0], folder + '/' + pair[1] + '_' + String(i + 1).padStart(2, '0') + '.' + extOf(pair[0])).then(ok => {
-          if (ok) okN++; else failN++;
+        downloadOne(pair[0], folder + '/' + pair[1] + '_' + String(i + 1).padStart(2, '0') + '.' + extOf(pair[0])).then(r => {
+          if (r.ok) okN++; else { failN++; if (!firstErr) firstErr = r.err || 'unknown'; }
           upd();
         });
       });
