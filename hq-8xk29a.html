@@ -863,7 +863,12 @@
         return;
       }
       const now = new Date();
-      const dayKey = (d) => d.toISOString().slice(0, 10);
+      // 日界统一按「美国洛杉矶时间」切分（店铺面向美区，老板要看的是美西当天，而非 UTC 或浏览器本地时区）
+      const dayKey = (d) => {
+        const p = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(d);
+        const o = {}; p.forEach(x => { o[x.type] = x.value; });
+        return o.year + '-' + o.month + '-' + o.day;
+      };
       const todayKey = dayKey(now);
 
       const todays = views.filter(v => (v.created_at || '').slice(0, 10) === todayKey);
@@ -879,10 +884,10 @@
       views.forEach(v => { if (!(v.session_id in sessNV)) sessNV[v.session_id] = !!v.new_visitor; });
       const newPct = allSess.size ? Math.round(Object.values(sessNV).filter(Boolean).length / allSess.size * 100) : 0;
 
-      // 漏斗：按会话命中过哪些事件
+      // 漏斗：按会话命中过哪些事件（仅当日，洛杉矶时区）
       const sessEv = {};
-      views.forEach(v => { (sessEv[v.session_id] = sessEv[v.session_id] || new Set()).add(v.event); });
-      const nSess = allSess.size;
+      todays.forEach(v => { (sessEv[v.session_id] = sessEv[v.session_id] || new Set()).add(v.event); });
+      const nSess = todayUV;
       const nProduct = Object.values(sessEv).filter(s => s.has('product_view')).length;
       const nCart = Object.values(sessEv).filter(s => s.has('add_to_cart')).length;
       const nCheckout = Object.values(sessEv).filter(s => s.has('begin_checkout')).length;
@@ -902,8 +907,8 @@
       views.forEach(v => { const k = (v.created_at || '').slice(0, 10); if (k in pvBy && v.event === 'pageview') { pvBy[k]++; sessBy[k][v.session_id] = 1; } });
       drawDualLine('chart-ana-trend', days, Object.values(pvBy), Object.keys(sessBy).map(k => Object.keys(sessBy[k]).length));
 
-      // 来源 / 设备（按 pageview）
-      const pv = views.filter(v => v.event === 'pageview');
+      // 来源 / 设备 / 明细榜：均按「洛杉矶当天」的 pageview 统计
+      const pv = todays.filter(v => v.event === 'pageview');
       const src = {}, dev = {};
       pv.forEach(v => { const s = v.source_kind || 'direct'; src[s] = (src[s] || 0) + 1; const d = v.device || 'desktop'; dev[d] = (dev[d] || 0) + 1; });
       const sK = Object.keys(ANA_SRC).filter(k => src[k]);
@@ -979,7 +984,7 @@
       // 热门页面（商品页按 slug 细分）/ 热门商品（按 product_view）
       const pages = {}, prods = {};
       pv.forEach(v => { let k = v.path || '/'; if (/product\.html/.test(k) && v.product_slug) k = '商品页 · ' + v.product_slug; pages[k] = (pages[k] || 0) + 1; });
-      views.forEach(v => { if (v.event === 'product_view' && v.product_slug) prods[v.product_slug] = (prods[v.product_slug] || 0) + 1; });
+      todays.forEach(v => { if (v.event === 'product_view' && v.product_slug) prods[v.product_slug] = (prods[v.product_slug] || 0) + 1; });
       const pgArr = Object.entries(pages).sort((a, b) => b[1] - a[1]).slice(0, 8);
       drawBar('chart-ana-pages', pgArr.map(x => x[0]), pgArr.map(x => x[1]));
       const prArr = Object.entries(prods).sort((a, b) => b[1] - a[1]).slice(0, 8);
