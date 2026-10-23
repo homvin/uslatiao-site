@@ -127,11 +127,22 @@
           const reqByOrder = {};
           reqs.forEach(r => { if (!reqByOrder[r.order_id]) reqByOrder[r.order_id] = r; });
 
-          box.innerHTML = `<table class="admin"><thead><tr><th>Order</th><th>Date</th><th>Items</th><th>Total</th><th>Status</th><th></th></tr></thead><tbody>` +
+          box.innerHTML = `<table class="admin"><thead><tr><th>Order</th><th>Date</th><th>Items</th><th>Total</th><th>Payment</th><th>Shipping</th><th></th></tr></thead><tbody>` +
             orders.map(o => {
               const items = (o.items || []).map(i => `${i.qty}× ${i.name}`).join(', ');
               const d = o.created_at ? new Date(o.created_at).toLocaleDateString() : '';
               const req = reqByOrder[o.id];
+              // 付款状态 / 物流状态：从订单状态机拆分（pending=未付款 / paid / shipped / delivered / cancelled / refunded）
+              const PAID_LIKE = (o.status === 'paid' || o.status === 'shipped' || o.status === 'delivered');
+              const pay = o.status === 'pending' ? 'Unpaid'
+                : PAID_LIKE ? 'Paid'
+                : o.status === 'refunded' ? 'Refunded'
+                : o.status === 'cancelled' ? 'Canceled' : o.status;
+              const payColor = PAID_LIKE ? '#0f6e56' : (o.status === 'refunded' ? '#b5762a' : (o.status === 'cancelled' ? '#888780' : '#d9442b'));
+              let ship = '—';
+              if (o.status === 'paid') ship = 'Preparing';
+              else if (o.status === 'shipped') ship = 'Shipped' + (o.tracking_no ? ' · ' + o.tracking_no : '');
+              else if (o.status === 'delivered') ship = 'Delivered';
               // 取消入口规则：仅「已付款且未发货」；审核中/已拒绝不给重复入口
               let act = '';
               let expandable = false;
@@ -146,7 +157,7 @@
                 }
               }
               const formRow = expandable
-                ? `<tr class="rr-form-row" data-for="${o.id}" style="display:none"><td colspan="6"><div style="padding:10px 4px">
+                ? `<tr class="rr-form-row" data-for="${o.id}" style="display:none"><td colspan="8"><div style="padding:10px 4px">
                     <strong style="font-size:13px">Cancel order ${String(o.id).slice(0, 8)}</strong>
                     <p class="muted" style="font-size:12.5px;margin:6px 0">Requests within <strong>3 hours of ordering</strong> are reviewed first. Once an order ships it can no longer be cancelled. Approved requests are refunded in full.</p>
                     <textarea class="rr-reason" rows="2" style="width:100%;max-width:520px;font:inherit;font-size:13px;padding:8px;border:1px solid var(--line);border-radius:8px" placeholder="Tell us why (optional)"></textarea>
@@ -157,7 +168,7 @@
                     <p class="rr-msg" style="font-size:12px;margin:6px 0 0;color:#d9442b"></p>
                   </div></td></tr>`
                 : '';
-              return `<tr><td>${String(o.id).slice(0, 8)}</td><td>${d}</td><td>${items}</td><td>${window.Money(o.total)}</td><td><span class="tag">${o.status}</span></td><td style="text-align:right">${act}</td></tr>` + formRow;
+              return `<tr><td>${String(o.id).slice(0, 8)}</td><td>${d}</td><td>${items}</td><td>${window.Money(o.total)}</td><td><span class="tag" style="background:#f3faf5;color:${payColor}">${pay}</span></td><td><span class="tag" style="background:#f6f4ef;color:#5f5e5a">${ship}</span></td><td style="text-align:right">${act}</td></tr>` + formRow;
             }).join('') + `</tbody></table>`;
 
           box.querySelectorAll('[data-cancel]').forEach(b => {
