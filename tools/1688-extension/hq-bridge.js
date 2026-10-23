@@ -74,64 +74,11 @@
     if (t) { t.textContent = text; t.style.color = color || '#9fb3aa'; }
   }
 
-  // —— 页面主世界执行的导入函数（在那里才看得到 window.Data）——
-  // 通过 window.postMessage 回传 start / progress / result，比 CustomEvent 跨世界更稳。
-  function uslImportMain(drafts) {
-    const post = (m) => { try { window.postMessage(Object.assign({ source: 'usl-import' }, m), '*'); } catch (e) {} };
-    const results = [];
-    if (!window.Data || typeof window.Data.saveProduct !== 'function') {
-      console.error('[USLATIAO] window.Data.saveProduct 不可用（页面数据层未就绪）');
-      post({ type: 'error', error: 'page_not_ready' });
-      return;
-    }
-    (async () => {
-      const list = drafts || [];
-      post({ type: 'start', total: list.length });
-      console.log('[USLATIAO] 开始导入，共 ' + list.length + ' 条');
-      let done = 0;
-      for (const d of list) {
-        const p = d.product || {};
-        try {
-          const slug = (String(p.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'item') + '-' + Date.now().toString(36).slice(-4);
-          const row = {
-            slug: slug,
-            name: p.name || 'Untitled',
-            subtitle: '',
-            price: p.price || 0,
-            compare_at: p.compare_at || null,
-            category: p.category || 'spicy-strips',
-            heat: 0,
-            stock: 0,
-            sold_count: 0,
-            weight_oz: p.weight_oz || null,
-            tags: [],
-            bullets: [],
-            image: '',
-            images: [],
-            detail_images: [],
-            sku: (p.sku || slug).toUpperCase().slice(0, 24),
-            status: 'draft'
-          };
-          console.log('[USLATIAO] 导入中 (' + (done + 1) + '/' + list.length + ')：' + row.name);
-          const r = await window.Data.saveProduct(row);
-          const ok = !!(r && r.ok);
-          const err = (r && r.error) || '';
-          results.push({ id: d.id, ok: ok, err: err });
-          done++;
-          console.log('[USLATIAO] 第 ' + done + ' 条 ' + (ok ? '成功' : ('失败：' + err)));
-          post({ type: 'progress', done: done, total: list.length, lastOk: ok, lastErr: err, lastName: row.name });
-        } catch (e) {
-          const msg = String(e && e.message || e);
-          results.push({ id: d.id, ok: false, err: msg });
-          done++;
-          console.error('[USLATIAO] 第 ' + done + ' 条异常：' + msg);
-          post({ type: 'progress', done: done, total: list.length, lastOk: false, lastErr: msg, lastName: p.name || 'Untitled' });
-        }
-      }
-      console.log('[USLATIAO] 导入完成：成功 ' + results.filter(r => r.ok).length + ' / ' + results.length);
-      post({ type: 'result', results: results });
-    })();
-  }
+  // —— 页面主世界的导入函数已移至 background.js（uslImportMain）——
+  // 原因：内联 <script> 注入被 MV3 CSP 拦截（"Executing inline script violates
+  // Content Security Policy"），脚本根本不执行 → 上一轮"卡在导入中/0%"的真凶。
+  // 现改为：发消息给 background → chrome.scripting.executeScript(world:'MAIN')，
+  // 该通道不受页面 CSP 限制；结果经 window.postMessage 回传本脚本更新进度条。
 
   async function importAll() {
     if (!banner) return;
@@ -202,11 +149,17 @@
     }
     window.addEventListener('message', onMsg);
 
-    // 把导入函数注入页面主世界执行（携带草稿数据），结果经 postMessage 传回
-    const s = document.createElement('script');
-    s.textContent = '(' + uslImportMain.toString() + ')(' + JSON.stringify(drafts.map(d => ({ id: d.id, product: d.product }))) + ');';
-    (document.head || document.documentElement).appendChild(s);
-    s.remove();
+    // 请 background 用 chrome.scripting.executeScript(world:'MAIN') 在主世界执行导入
+    // （内联 <script> 会被 MV3 CSP 拦截——上一轮卡死的真凶），结果经 postMessage 传回
+    chrome.runtime.sendMessage({ type: 'USL_IMPORT_RUN', drafts: drafts.map(d => ({ id: d.id, product: d.product })) }, (out) => {
+      if (finished) return;
+      const le = chrome.runtime.lastError;
+      if (le || !out || !out.ok) {
+        finished = true; clearTimeout(watchdog); window.removeEventListener('message', onMsg);
+        tip('导入启动失败：' + ((le && le.message) || (out && out.err) || '未知') + '（请刷新扩展后再试）', '#e0876a');
+        btn.disabled = false; btn.textContent = '重试';
+      }
+    });
   }
 
   // 立即读草稿并弹条幅：不等后台框架加载（后台白屏时也能看到草稿提示）
