@@ -115,10 +115,10 @@
       <textarea id="usl-detail" style="width:100%;height:60px;box-sizing:border-box;padding:7px 9px;border:1px solid #d3d1c7;border-radius:8px;font-size:11px;margin:4px 0 10px">${parsed.detail.join('\n')}</textarea>
       <div style="font-size:11px;color:#888780;margin-bottom:10px">来源：${parsed.source_url}</div>
       <div style="display:flex;gap:8px">
-        <button id="usl-send" style="flex:1;padding:9px;border:0;border-radius:8px;background:#0f6e56;color:#fff;cursor:pointer">转存图片并保存草稿</button>
+        <button id="usl-send" style="flex:1;padding:9px;border:0;border-radius:8px;background:#0f6e56;color:#fff;cursor:pointer">保存商品并下载图片</button>
         <button id="usl-close" style="padding:9px 12px;border:1px solid #d3d1c7;border-radius:8px;background:#fff;cursor:pointer">关闭</button>
       </div>
-      <div style="font-size:11px;color:#888780;margin-top:6px">保存后，打开 USLATIAO 后台页面，顶部会弹出「一键导入」。</div>
+      <div style="font-size:11px;color:#888780;margin-top:6px">图片下载到本地「下载目录/uslatiao-import/…」（建议把 Chrome 下载位置设为 D 盘），商品信息存草稿；后台一键导入后再手动上传图片。</div>
       <div id="usl-msg" style="font-size:12px;margin-top:8px;min-height:16px"></div>
     `;
     document.body.appendChild(panel);
@@ -135,45 +135,34 @@
       const detailUrls = $('#usl-detail').value.split('\n').map(s => s.trim()).filter(Boolean);
       if (!name || !price) { msg().textContent = '名称和售价必填'; msg().style.color = '#d9442b'; return; }
       const btn = $('#usl-send');
-      btn.disabled = true;
+      btn.disabled = true; btn.textContent = '准备下载图片…';
 
-      // —— 图片转存：经扩展后台下载（绕过页面 CORS），转 base64 data URI ——
-      const grab = async (url) => {
-        try {
-          const out = await chrome.runtime.sendMessage({ type: 'USL_FETCH_IMAGE', url });
-          return (out && out.ok) ? out.dataUri : '';
-        } catch (e) { return ''; }
-      };
-      const all = imageUrls.concat(detailUrls);
-      const done = [];
+      // —— 图片下载到本地（不进服务器，主人自行挑选上传）——
+      const slug = (name.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 24) || 'item') + '-' + Date.now().toString(36).slice(-4);
+      const ts = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 12);
+      const folder = 'uslatiao-import/' + slug + '_' + ts;
+      const extOf = (u) => { const m = u.match(/\.(jpg|jpeg|png|webp|gif)(?:[?#]|$)/i); return m ? m[1].toLowerCase().replace('jpeg', 'jpg') : 'jpg'; };
+      const downloadOne = (url, file) => new Promise(res => {
+        chrome.downloads.download({ url: url, filename: file, conflictAction: 'overwrite', saveAs: false }, () => res(chrome.runtime.lastError ? false : true));
+      });
+      let okN = 0;
+      const all = imageUrls.map(u => [u, 'main']).concat(detailUrls.map(u => [u, 'detail']));
       for (let i = 0; i < all.length; i++) {
-        btn.textContent = '转存图片 ' + (i + 1) + '/' + all.length + '…';
-        done.push(await grab(all[i]));
-      }
-      const imgs = done.slice(0, imageUrls.length).filter(Boolean);
-      const details = done.slice(imageUrls.length).filter(Boolean);
-      if (!imgs.length) {
-        msg().style.color = '#d9442b';
-        msg().textContent = '一张图都没转存成功（阿里/淘宝图床偶尔限流），请稍后重试或在后台手动传图。';
-        btn.disabled = false; btn.textContent = '转存图片并保存草稿';
-        return;
+        btn.textContent = '下载图片 ' + (i + 1) + '/' + all.length + '…';
+        if (await downloadOne(all[i][0], folder + '/' + all[i][1] + '_' + String(i + 1).padStart(2, '0') + '.' + extOf(all[i][0]))) okN++;
       }
 
+      // —— 商品信息存草稿（图不进库，留给主人手动上传）——
       const draft = {
         id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
         created_at: new Date().toISOString(),
         source_url: parsed.source_url,
         product: {
-          name: name,
-          price: price,
-          compare_at: compare,
-          weight_oz: weightOz,
-          category: category,
-          status: 'draft',
-          image: imgs[0],
-          images: imgs,
-          detail_images: details
-        }
+          name: name, price: price, compare_at: compare,
+          weight_oz: weightOz, category: category, status: 'draft',
+          image: '', images: [], detail_images: []
+        },
+        meta: { folder: folder, main_count: imageUrls.length, detail_count: detailUrls.length }
       };
       try {
         const st = await chrome.storage.local.get('uslatiao_drafts');
@@ -181,12 +170,12 @@
         list.push(draft);
         await chrome.storage.local.set({ uslatiao_drafts: list });
         msg().style.color = '#0f6e56';
-        msg().textContent = '已保存草稿（图片 ' + imgs.length + ' 张 + 详情 ' + details.length + ' 张）。打开后台页面即可一键导入。';
+        msg().textContent = '商品已存草稿；' + okN + ' 张图下载到「下载目录/' + folder + '」。请到后台商品编辑手动上传图片。';
         btn.textContent = '已保存草稿 ✓';
       } catch (e) {
         msg().style.color = '#d9442b';
         msg().textContent = '保存失败：' + (e && e.message || e);
-        btn.disabled = false; btn.textContent = '转存图片并保存草稿';
+        btn.disabled = false; btn.textContent = '保存商品并下载图片';
       }
     };
   };

@@ -84,7 +84,7 @@
     await writeDrafts(remain);
     tip.textContent = '完成：成功 ' + okN + ' 条' + (failN ? '，失败 ' + failN + ' 条（草稿保留，可重试）' : '');
     if (okN && !failN) {
-      toast('已导入 ' + okN + ' 条采集草稿，页面即将刷新');
+      toast('已导入 ' + okN + ' 条采集草稿（图片请在后台商品编辑手动上传），页面即将刷新');
       setTimeout(() => location.reload(), 1200);
     } else if (okN) {
       btn.disabled = false;
