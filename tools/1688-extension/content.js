@@ -174,12 +174,23 @@
 
       // 图片全部并行后台下载（不阻塞操作），每完成一张更新计数
       const all = imageUrls.map(u => [u, 'main']).concat(detailUrls.map(u => [u, 'detail']));
-      let okN = 0;
-      const upd = () => { msg().style.color = '#0f6e56'; msg().textContent = '商品已存草稿 ✓；图片已下载 ' + okN + '/' + all.length + ' 张 → 「下载目录/' + folder + '」'; };
+      let okN = 0, failN = 0;
+      const upd = () => {
+        if (okN + failN >= all.length && okN === 0) {
+          msg().style.color = '#d9442b';
+          msg().textContent = '图片全部下载失败。请按 Ctrl+J 打开 Chrome「下载记录」查看原因（多半是下载位置没改、或图床拦截）；商品草稿已存好，不影响去后台导入。';
+          return;
+        }
+        msg().style.color = '#0f6e56';
+        msg().textContent = '商品已存草稿 ✓；图片已下载 ' + okN + '/' + all.length + ' 张' + (failN ? '（失败 ' + failN + ' 张）' : '') + ' → 「下载目录/' + folder + '」';
+      };
       upd();
       btn.textContent = '已保存草稿 ✓';
       all.forEach((pair, i) => {
-        downloadOne(pair[0], folder + '/' + pair[1] + '_' + String(i + 1).padStart(2, '0') + '.' + extOf(pair[0])).then(ok => { okN += ok ? 1 : 0; upd(); });
+        downloadOne(pair[0], folder + '/' + pair[1] + '_' + String(i + 1).padStart(2, '0') + '.' + extOf(pair[0])).then(ok => {
+          if (ok) okN++; else failN++;
+          upd();
+        });
       });
     };
   };

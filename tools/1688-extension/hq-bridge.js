@@ -60,6 +60,10 @@
   async function importAll() {
     const tip = banner.querySelector('[data-role="tip"]');
     const btn = banner.querySelector('[data-act="import"]');
+    if (!window.Data) {
+      tip.textContent = '后台页面还没加载完成，请按 F5 刷新本页后再点导入';
+      return;
+    }
     btn.disabled = true;
     const drafts = await readDrafts();
     if (!drafts.length) { banner.remove(); return; }
@@ -126,8 +130,11 @@
     return row;
   }
 
-  waitForData(async () => {
-    const drafts = await readDrafts();
-    if (drafts.length) ensureBanner(drafts.length);
-  });
+  // 立即读草稿并弹条幅：不等后台框架加载（后台白屏时也能看到草稿提示）
+  (async () => {
+    try {
+      const drafts = await readDrafts();
+      if (drafts.length) ensureBanner(drafts.length);
+    } catch (e) { /* 扩展刚重载时 context 可能失效，忽略 */ }
+  })();
 })();
