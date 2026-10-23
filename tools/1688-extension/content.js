@@ -135,7 +135,7 @@
       const detailUrls = $('#usl-detail').value.split('\n').map(s => s.trim()).filter(Boolean);
       if (!name || !price) { msg().textContent = '名称和售价必填'; msg().style.color = '#d9442b'; return; }
       const btn = $('#usl-send');
-      btn.disabled = true; btn.textContent = '准备下载图片…';
+      btn.disabled = true; btn.textContent = '保存中…';
 
       // —— 图片下载到本地（不进服务器，主人自行挑选上传）——
       const slug = (name.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 24) || 'item') + '-' + Date.now().toString(36).slice(-4);
@@ -145,14 +145,8 @@
       const downloadOne = (url, file) => new Promise(res => {
         chrome.downloads.download({ url: url, filename: file, conflictAction: 'overwrite', saveAs: false }, () => res(chrome.runtime.lastError ? false : true));
       });
-      let okN = 0;
-      const all = imageUrls.map(u => [u, 'main']).concat(detailUrls.map(u => [u, 'detail']));
-      for (let i = 0; i < all.length; i++) {
-        btn.textContent = '下载图片 ' + (i + 1) + '/' + all.length + '…';
-        if (await downloadOne(all[i][0], folder + '/' + all[i][1] + '_' + String(i + 1).padStart(2, '0') + '.' + extOf(all[i][0]))) okN++;
-      }
 
-      // —— 商品信息存草稿（图不进库，留给主人手动上传）——
+      // 先存草稿（不等图片），点一下立即完成
       const draft = {
         id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
         created_at: new Date().toISOString(),
@@ -164,19 +158,29 @@
         },
         meta: { folder: folder, main_count: imageUrls.length, detail_count: detailUrls.length }
       };
+      let saved = true;
       try {
         const st = await chrome.storage.local.get('uslatiao_drafts');
         const list = Array.isArray(st.uslatiao_drafts) ? st.uslatiao_drafts : [];
         list.push(draft);
         await chrome.storage.local.set({ uslatiao_drafts: list });
-        msg().style.color = '#0f6e56';
-        msg().textContent = '商品已存草稿；' + okN + ' 张图下载到「下载目录/' + folder + '」。请到后台商品编辑手动上传图片。';
-        btn.textContent = '已保存草稿 ✓';
-      } catch (e) {
+      } catch (e) { saved = false; }
+      if (!saved) {
         msg().style.color = '#d9442b';
-        msg().textContent = '保存失败：' + (e && e.message || e);
+        msg().textContent = '保存失败：' + (chrome.runtime.lastError && chrome.runtime.lastError.message || '请重试');
         btn.disabled = false; btn.textContent = '保存商品并下载图片';
+        return;
       }
+
+      // 图片全部并行后台下载（不阻塞操作），每完成一张更新计数
+      const all = imageUrls.map(u => [u, 'main']).concat(detailUrls.map(u => [u, 'detail']));
+      let okN = 0;
+      const upd = () => { msg().style.color = '#0f6e56'; msg().textContent = '商品已存草稿 ✓；图片已下载 ' + okN + '/' + all.length + ' 张 → 「下载目录/' + folder + '」'; };
+      upd();
+      btn.textContent = '已保存草稿 ✓';
+      all.forEach((pair, i) => {
+        downloadOne(pair[0], folder + '/' + pair[1] + '_' + String(i + 1).padStart(2, '0') + '.' + extOf(pair[0])).then(ok => { okN += ok ? 1 : 0; upd(); });
+      });
     };
   };
 })();
