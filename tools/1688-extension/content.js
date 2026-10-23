@@ -72,6 +72,9 @@
       return Array.from(new Set((arr || []).map(norm).filter(Boolean))).filter(u => /alicdn|taobaocdn|tbcdn|1688/.test(u));
     };
     images = uniq(images); detail = uniq(detail);
+    // 数量封顶：主图最多 10 张、详情最多 15 张，避免重复/超大图无谓占空间与拖慢转存
+    images = images.slice(0, 10);
+    detail = detail.slice(0, 15);
     return { name, cnyMin, cnyMax, images, detail, weightOz, source_url: location.href };
   }
 
