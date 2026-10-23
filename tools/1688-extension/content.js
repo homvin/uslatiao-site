@@ -140,7 +140,8 @@
       // —— 图片下载到本地（不进服务器，主人自行挑选上传）——
       const slug = (name.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 24) || 'item') + '-' + Date.now().toString(36).slice(-4);
       const ts = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 12);
-      const folder = 'uslatiao-import/' + slug + '_' + ts;
+      // 直接用 Chrome 下载根目录（主人已设为 D:\uslatiao-import），不再嵌套同名子文件夹
+      const folder = slug + '_' + ts;
       const extOf = (u) => { const m = u.match(/\.(jpg|jpeg|png|webp|gif)(?:[?#]|$)/i); return m ? m[1].toLowerCase().replace('jpeg', 'jpg') : 'jpg'; };
       const downloadOne = (url, file) => new Promise(res => {
         chrome.downloads.download({ url: url, filename: file, conflictAction: 'overwrite', saveAs: false }, () => res(chrome.runtime.lastError ? false : true));
@@ -182,7 +183,7 @@
           return;
         }
         msg().style.color = '#0f6e56';
-        msg().textContent = '商品已存草稿 ✓；图片已下载 ' + okN + '/' + all.length + ' 张' + (failN ? '（失败 ' + failN + ' 张）' : '') + ' → 「下载目录/' + folder + '」';
+        msg().textContent = '商品已存草稿 ✓；图片已下载 ' + okN + '/' + all.length + ' 张' + (failN ? '（失败 ' + failN + ' 张）' : '') + ' → 下载位置下的「' + folder + '」文件夹';
       };
       upd();
       btn.textContent = '已保存草稿 ✓';
