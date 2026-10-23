@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "USLATIAO 1688 采集",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "在 1688 商品页一键采集商品（含图片转存），打开 USLATIAO 后台一键导入为草稿",
   "permissions": ["storage", "unlimitedStorage", "activeTab"],
   "host_permissions": [
@@ -9,6 +9,8 @@
     "https://*.1688.com/*",
     "https://*.alicdn.com/*",
     "https://*.taobaocdn.com/*",
+    "https://*.taobao.com/*",
+    "https://*.tmall.com/*",
     "https://www.uslatiao.com/*",
     "https://uslatiao-store.app.workbuddy.host/*"
   ],

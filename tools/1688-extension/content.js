@@ -3,8 +3,14 @@
 // 仅在商品详情页（URL 含 /offer/）显示浮动按钮与采集面板：
 //   解析（全局变量优先 → DOM 兜底）→ 弹窗可改（名称/售价/重量/分类/图片）→ 图片转存 → 存浏览器草稿
 (function () {
-  // 只在商品详情页注入；列表页/首页不干扰
-  if (!/\/offer\//.test(location.href)) return;
+  const _href = location.href;
+  const _host = location.hostname;
+  const isTaobao = /taobao\.com$|tmall\.com$/.test(_host);
+  const is1688 = /1688\.com$/.test(_host);
+  // 只在对应平台的商品详情页注入
+  if (is1688 && !/\/offer\//.test(_href)) return;
+  if (isTaobao && !/\/item\.htm|\/item\/|\/detail\.htm/.test(_href)) return;
+  if (!is1688 && !isTaobao) return;
   if (document.getElementById('usl-capture-bar')) return; // 避免重复注入
 
   const $ = (s, r) => (r || document).querySelector(s);
@@ -24,35 +30,48 @@
       .filter(u => /^https?:\/\//.test(u));
   }
 
-  function parsePage() {
+  function parsePage(isTaobao) {
     const g = globalData();
-    // 标题
-    let name = (g && (g.title || g.subject)) || txt('#mod-detail-title h1') || txt('.d-title') || document.title || '';
-    name = name.replace(/【.*?】/g, '').replace(/\s+/g, ' ').trim();
+    let name = '', cnyMin = 0, cnyMax = 0, images = [], detail = [], weightOz = 0;
 
-    // 价格（人民币区间）
-    let cnyMin = 0, cnyMax = 0;
-    const priceText = (g && (g.priceRange || g.price)) || txt('#mod-detail-price') || txt('.price-notice') || txt('.price');
-    const nums = (priceText || '').match(/(\d+(?:\.\d+)?)/g);
-    if (nums && nums.length) {
-      const arr = nums.map(Number);
-      cnyMin = Math.min.apply(null, arr);
-      cnyMax = Math.max.apply(null, arr);
+    if (isTaobao) {
+      // —— 淘宝 / 天猫 ——
+      name = txt('#J_Title h1') || txt('h1.tb-main-title') || document.title || '';
+      name = name.replace(/【.*?】|\[.*?\]/g, '').replace(/\s+/g, ' ').trim();
+      const pEl = $('#J_StrPrice') || $('.tb-rmb-num') || $('.tm-price') || $('#J_PromoPrice') || $('.tb-promo-price');
+      const priceText = (pEl ? pEl.textContent : '') || (g && (g.priceRange || g.price)) || '';
+      const nums = (priceText || '').match(/(\d+(?:\.\d+)?)/g);
+      if (nums && nums.length) { const arr = nums.map(Number); cnyMin = Math.min.apply(null, arr); cnyMax = Math.max.apply(null, arr); }
+      // 主图 + 缩略图列表
+      const booth = $('#J_ImgBooth') || $('.tb-main-image img');
+      if (booth && booth.getAttribute('src')) images.push(booth.getAttribute('src'));
+      $$('.tb-thumb li img, .tb-thumb img, .J_TMain li img, .tb-pic ul li img').forEach(img => {
+        const u = img.getAttribute('src') || img.getAttribute('data-src') || img.getAttribute('data-lazy-src');
+        if (u) images.push(u);
+      });
+      // 重量：规格参数区
+      const wTxt = (txt('#J_AttrList') || txt('.attributes-list') || txt('.tm-item-attributes') || '').match(/重量[^\d]*(\d+(?:\.\d+)?)\s*(g|克|kg|千克)/i);
+      if (wTxt) { let w = parseFloat(wTxt[1]); if (/kg|千克/i.test(wTxt[2])) w *= 1000; weightOz = round2(w / 28.3495); }
+    } else {
+      // —— 1688 国内站 / 国际站 ——
+      name = (g && (g.title || g.subject)) || txt('#mod-detail-title h1') || txt('.d-title') || document.title || '';
+      name = name.replace(/【.*?】/g, '').replace(/\s+/g, ' ').trim();
+      const priceText = (g && (g.priceRange || g.price)) || txt('#mod-detail-price') || txt('.price-notice') || txt('.price');
+      const nums = (priceText || '').match(/(\d+(?:\.\d+)?)/g);
+      if (nums && nums.length) { const arr = nums.map(Number); cnyMin = Math.min.apply(null, arr); cnyMax = Math.max.apply(null, arr); }
+      images = pickImages('#img-list').concat(pickImages('#dt-tab')).concat(pickImages('.img-list'));
+      if (!images.length && g && g.imageList) images = (g.imageList || []).map(x => x.url || x).filter(String);
+      detail = pickImages('#description').concat(pickImages('.desc-wrap')).concat(pickImages('#detail-description'));
+      const wTxt = (txt('#mod-detail-attributes') || txt('.sku-attr-list') || '').match(/(\d+(?:\.\d+)?)\s*(g|克|kg|千克)/i);
+      if (wTxt) { let w = parseFloat(wTxt[1]); if (/kg|千克/i.test(wTxt[2])) w *= 1000; weightOz = round2(w / 28.3495); }
     }
 
-    // 主图 / 详情图
-    let images = pickImages('#img-list') .concat(pickImages('#dt-tab')).concat(pickImages('.img-list'));
-    if (!images.length && g && g.imageList) images = (g.imageList || []).map(x => x.url || x).filter(String);
-    let detail = pickImages('#description').concat(pickImages('.desc-wrap')).concat(pickImages('#detail-description'));
-    // 去重 + 只要 alicdn 图（1688 图床）
-    const uniq = (arr) => Array.from(new Set(arr.filter(u => /alicdn|1688/.test(u))));
+    // 去重 + 只收阿里系图床（alicdn / taobaocdn / tbcdn）；兼容 // 协议相对的图
+    const uniq = (arr) => {
+      const norm = (u) => /^https?:\/\//.test(u) ? u : (/^\/\//.test(u) ? 'https:' + u : '');
+      return Array.from(new Set((arr || []).map(norm).filter(Boolean))).filter(u => /alicdn|taobaocdn|tbcdn|1688/.test(u));
+    };
     images = uniq(images); detail = uniq(detail);
-
-    // 重量（尽力而为，抓不到留空）
-    let weightOz = 0;
-    const wTxt = (txt('#mod-detail-attributes') || txt('.sku-attr-list') || '').match(/(\d+(?:\.\d+)?)\s*(g|克|kg|千克)/i);
-    if (wTxt) { let w = parseFloat(wTxt[1]); if (/kg|千克/i.test(wTxt[2])) w *= 1000; weightOz = round2(w / 28.3495); }
-
     return { name, cnyMin, cnyMax, images, detail, weightOz, source_url: location.href };
   }
 
@@ -64,7 +83,7 @@
   document.body.appendChild(bar);
 
   $('#usl-cap-btn').onclick = async () => {
-    const parsed = parsePage();
+    const parsed = parsePage(isTaobao);
     const cfg = await chrome.storage.sync.get({ base: 'https://www.uslatiao.com', key: '', rate: '6.72' });
     const rate = (+cfg.rate > 0 ? +cfg.rate : 6.72);
     const usdMin = round2(parsed.cnyMin / rate);
@@ -132,7 +151,7 @@
       const details = done.slice(imageUrls.length).filter(Boolean);
       if (!imgs.length) {
         msg().style.color = '#d9442b';
-        msg().textContent = '一张图都没转存成功（1688 图床拦截），请稍后重试或在后台手动传图。';
+        msg().textContent = '一张图都没转存成功（阿里/淘宝图床偶尔限流），请稍后重试或在后台手动传图。';
         btn.disabled = false; btn.textContent = '转存图片并保存草稿';
         return;
       }
