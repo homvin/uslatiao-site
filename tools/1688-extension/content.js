@@ -52,6 +52,28 @@
     return out;
   }
 
+  // —— 解析淘宝/天猫 SKU（规格行只显示价格、不显示库存 → 库存记 0 后台手补）——
+  function parseSkusTaobao() {
+    const out = [];
+    const seen = new Set();
+    const els = $$('li, div, span, p, td');
+    for (const el of els) {
+      if (el.children.length > 4) continue;
+      const t = (el.textContent || '').replace(/\s+/g, ' ').trim();
+      if (!t || t.length > 60) continue;
+      // 排除营销/价格区噪音行（收货价、券、运费等）
+      if (/收货|到手|优惠|券|折|起批|包邮|运费|月销|付款|人已|库存|合计|积分|红包|限/.test(t)) continue;
+      const m = t.match(/^(.+?)\s*[¥￥]\s*(\d+(?:\.\d+)?)/);
+      if (!m) continue;
+      const label = m[1].replace(/^[·•◦\s]+/, '').trim();
+      if (!label || label.length < 2 || seen.has(label)) continue;
+      seen.add(label);
+      out.push({ label: label, price: +m[2], stock: 0 });
+      if (out.length >= 60) break;
+    }
+    return out;
+  }
+
   function parsePage(isTaobao) {
     const g = globalData();
     let name = '', cnyMin = 0, cnyMax = 0, images = [], detail = [], weightOz = 0, skus = [];
@@ -74,6 +96,19 @@
       // 重量：规格参数区
       const wTxt = (txt('#J_AttrList') || txt('.attributes-list') || txt('.tm-item-attributes') || '').match(/重量[^\d]*(\d+(?:\.\d+)?)\s*(g|克|kg|千克)/i);
       if (wTxt) { let w = parseFloat(wTxt[1]); if (/kg|千克/i.test(wTxt[2])) w *= 1000; weightOz = round2(w / 28.3495); }
+      // 现代天猫页老价格选择器基本失效：兜底扫 class 含 price 的元素取 ¥数字
+      if (!cnyMin) {
+        const nums = $$('[class*="price" i]').map(e => ((e.textContent || '').match(/[¥￥](\d+(?:\.\d+)?)/) || [])[1]).filter(Boolean).map(Number).filter(x => x > 0);
+        if (nums.length) { cnyMin = Math.min.apply(null, nums); cnyMax = Math.max.apply(null, nums); }
+      }
+      skus = parseSkusTaobao();
+      if (skus.length) {
+        const ps = skus.map(s => s.price).filter(x => x > 0);
+        if (ps.length) {
+          cnyMin = Math.min.apply(null, ps.concat(cnyMin ? [cnyMin] : []));
+          cnyMax = Math.max.apply(null, ps.concat(cnyMax ? [cnyMax] : []));
+        }
+      }
     } else {
       // —— 1688 国内站 / 国际站 ——
       name = (g && (g.title || g.subject)) || txt('#mod-detail-title h1') || txt('.d-title') || document.title || '';
