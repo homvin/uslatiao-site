@@ -1273,8 +1273,11 @@ window.Data = (function () {
     if (database) {
       for (const p of uniq) {
         try {
+          // Phase 0 修复：products 表无 note 列，整包 upsert 会报 schema 错。
+          // 这里剔除 note 后再入库（note 仅用于本地预览/回查备注，不进前台与数据库）。
+          const { note, ...dbp } = p;
           // 不带 .select()：避免 PostgREST 回读触发 RLS SELECT 判定（42501 坑）
-          const { error } = await database.from('products').upsert(p, { onConflict: 'slug' });
+          const { error } = await database.from('products').upsert(dbp, { onConflict: 'slug' });
           if (error) failed.push({ slug: p.slug, error: error.message });
           else inserted++;
         } catch (e) { failed.push({ slug: p.slug, error: String(e) }); }

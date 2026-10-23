@@ -375,6 +375,125 @@ async function handleMediaGet(request, env, url, reqOrigin) {
 }
 
 /* =========================================================================
+ * 1688 采集入库：POST /api/hq/import-product
+ * -------------------------------------------------------------------------
+ * 采集扩展把解析好的商品 + 图片链接推到这里：
+ *   1) 校验 x-hq-key（二级钥匙，存 HQ_SCRAPER_KEY，可随时吊销）
+ *   2) 逐个下载 1688 图 → base64 → 写 media 表（CLOUD_SERVICE_KEY 旁路 RLS）
+ *   3) 用 /media/<id> 重写 image/images/detail_images
+ *   4) upsert products（status='draft'，永不自动上架）
+ * 不用 Supabase service_role 直连：复用云端 REST + CLOUD_SERVICE_KEY（与订单 webhook 同套），
+ * 降低高权限密钥暴露面。
+ * ========================================================================= */
+function slugify(s) {
+  return String(s || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'product';
+}
+function abToB64(buf) {
+  let bin = '';
+  const bytes = new Uint8Array(buf);
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  return btoa(bin);
+}
+async function fetchImage(url, env) {
+  try {
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', 'Referer': 'https://detail.1688.com/' }
+    });
+    if (!res.ok) return null;
+    const buf = await res.arrayBuffer();
+    return { buf, contentType: res.headers.get('content-type') || 'image/jpeg' };
+  } catch (e) { return null; }
+}
+async function insertMedia(env, id, buf, contentType) {
+  const b64 = abToB64(buf);
+  const res = await fetch(`${ORIGIN}/.cloud/database/rest/media`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-wb-webapp-access-key': env.WB_PK || WB_PK_DEFAULT,
+      'apikey': env.CLOUD_SERVICE_KEY,
+      'Authorization': 'Bearer ' + env.CLOUD_SERVICE_KEY,
+      'Prefer': 'return=minimal'
+    },
+    body: JSON.stringify({ id, kind: 'media', content_type: contentType, data: b64, bytes: buf.byteLength })
+  });
+  return res.ok;
+}
+async function handleImportProduct(request, env, reqOrigin) {
+  if (!env.HQ_SCRAPER_KEY || !env.CLOUD_SERVICE_KEY) {
+    return json({ ok: false, error: 'not_configured' }, 200, reqOrigin);
+  }
+  const key = request.headers.get('x-hq-key') || '';
+  if (key !== env.HQ_SCRAPER_KEY) {
+    return json({ ok: false, error: 'unauthorized' }, 403, reqOrigin);
+  }
+  let body;
+  try { body = await request.json(); } catch (e) { return json({ ok: false, error: 'bad_json' }, 400, reqOrigin); }
+  const p = body.product || {};
+  const name = String(p.name || '').trim();
+  const price = parseFloat(p.price);
+  if (!name || !(price > 0)) return json({ ok: false, error: 'bad_product' }, 400, reqOrigin);
+
+  const slug = slugify(p.slug || name) + '-' + Date.now().toString(36).slice(-4);
+  const sku = String(p.sku || slug).toUpperCase().slice(0, 24);
+
+  // 图片转存：主图 + 详情图，各取前 8 张，失败跳过不阻断
+  const store = async (urls) => {
+    const out = [];
+    for (const u of (urls || []).slice(0, 8)) {
+      const img = await fetchImage(u, env);
+      if (!img) continue;
+      const id = crypto.randomUUID();
+      if (await insertMedia(env, id, img.buf, img.contentType)) out.push('/media/' + id);
+    }
+    return out;
+  };
+  const images = await store(body.images);
+  const detail = await store(body.detail_images);
+
+  const record = {
+    slug,
+    name,
+    subtitle: String(p.subtitle || '').slice(0, 200),
+    category: String(p.category || 'spicy-strips').slice(0, 40),
+    price: Math.round(price * 100) / 100,
+    compare_at: p.compare_at ? Math.round(parseFloat(p.compare_at) * 100) / 100 : null,
+    stock: parseInt(p.stock, 10) || 0,
+    sold_count: 0,
+    heat: Math.max(0, Math.min(5, parseInt(p.heat, 10) || 0)),
+    status: 'draft',
+    sku,
+    weight_oz: Math.round((parseFloat(p.weight_oz) || 0) * 1000) / 1000,
+    image: images[0] || '',
+    images: images,
+    detail_images: detail,
+    option_name: '',
+    variants: [],
+    source_url: String(p.source_url || '').slice(0, 500),
+    created_at: new Date().toISOString()
+    // 注意：不含 note 列（products 表无此列，否则 upsert 报 schema 错）
+  };
+
+  const res = await fetch(`${ORIGIN}/.cloud/database/rest/products?on_conflict=slug`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-wb-webapp-access-key': env.WB_PK || WB_PK_DEFAULT,
+      'apikey': env.CLOUD_SERVICE_KEY,
+      'Authorization': 'Bearer ' + env.CLOUD_SERVICE_KEY,
+      'Prefer': 'resolution=merge-duplicates,return=minimal'
+    },
+    body: JSON.stringify(record)
+  });
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    return json({ ok: false, error: 'db_error', detail: txt.slice(0, 300) }, 502, reqOrigin);
+  }
+  return json({ ok: true, slug }, 200, reqOrigin);
+}
+
+/* =========================================================================
  * 主入口
  * ========================================================================= */
 export default {
@@ -408,6 +527,15 @@ export default {
       } catch (e) {
         return json({ ok: false, error: 'server_error', message: String((e && e.message) || e) }, 500, reqOrigin);
       }
+    }
+
+    // —— 1688 采集入库（扩展专用，二级密钥校验）——
+    if (url.pathname === '/api/hq/import-product') {
+      if (request.method === 'OPTIONS') {
+        return new Response(null, { status: 204, headers: corsHeaders(reqOrigin) });
+      }
+      if (request.method === 'POST') return await handleImportProduct(request, env, reqOrigin);
+      return new Response(null, { status: 405 });
     }
 
     // —— /.cloud/* 动态转发到云沙箱 ——

@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font: 13px/1.6 system-ui, sans-serif; padding: 16px 18px; width: 320px; color: #2c2c2a; }
+    h1 { font-size: 15px; margin: 0 0 12px; }
+    label { display: block; margin: 10px 0 4px; font-weight: 500; }
+    input { width: 100%; box-sizing: border-box; padding: 7px 9px; border: 1px solid #d3d1c7; border-radius: 8px; font-size: 13px; }
+    .tip { color: #888780; font-size: 12px; margin: 4px 0 0; }
+    button { margin-top: 14px; width: 100%; padding: 9px; border: 0; border-radius: 8px; background: #0f6e56; color: #fff; font-size: 13px; cursor: pointer; }
+    #msg { margin-top: 10px; font-size: 12px; color: #0f6e56; min-height: 16px; }
+  </style>
+</head>
+<body>
+  <h1>USLATIAO 采集设置</h1>
+  <label>后台域名</label>
+  <input id="base" placeholder="https://www.uslatiao.com">
+  <p class="tip">采集数据推送到的站点域名（默认已填）。</p>
+
+  <label>采集密钥（x-hq-key）</label>
+  <input id="key" placeholder="在后台「设置」生成的采集密钥">
+  <p class="tip">从 USLATIAO 后台「设置 / 采集密钥」处复制，切勿外泄。</p>
+
+  <label>汇率（人民币 → 美元，售价 = 进价 ÷ 汇率）</label>
+  <input id="rate" placeholder="6.72">
+  <p class="tip">默认 6.72，可在后台按采购实况调整。</p>
+
+  <button id="save">保存设置</button>
+  <div id="msg"></div>
+
+  <script src="options.js"></script>
+</body>
+</html>
