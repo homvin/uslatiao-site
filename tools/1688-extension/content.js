@@ -66,12 +66,23 @@
       if (wTxt) { let w = parseFloat(wTxt[1]); if (/kg|千克/i.test(wTxt[2])) w *= 1000; weightOz = round2(w / 28.3495); }
     }
 
-    // 去重 + 只收阿里系图床（alicdn / taobaocdn / tbcdn）；兼容 // 协议相对的图
+    // 去重 + 只收阿里系图床（alicdn / taobaocdn / tbcdn）；兼容 // 协议相对的图；排除 SVG 图标与 tps 小尺寸图标
     const uniq = (arr) => {
       const norm = (u) => /^https?:\/\//.test(u) ? u : (/^\/\//.test(u) ? 'https:' + u : '');
-      return Array.from(new Set((arr || []).map(norm).filter(Boolean))).filter(u => /alicdn|taobaocdn|tbcdn|1688/.test(u));
+      return Array.from(new Set((arr || []).map(norm).filter(Boolean)))
+        .filter(u => /alicdn|taobaocdn|tbcdn|1688/.test(u))
+        .filter(u => !/\.svg(\?|$)/i.test(u))
+        .filter(u => {
+          const m = u.match(/tps-(\d+)-(\d+)/);
+          return !m || (+m[1] >= 100 && +m[2] >= 100);
+        });
     };
     images = uniq(images); detail = uniq(detail);
+    // 兜底：容器没命中时，全页扫描阿里系图片（再由 uniq 过滤掉图标/小图）
+    if (!images.length) {
+      images = $$('img').map(img => img.getAttribute('src') || img.getAttribute('data-src') || img.getAttribute('data-lazy-src') || '').filter(Boolean);
+      images = uniq(images);
+    }
     // 数量封顶：主图最多 10 张、详情最多 15 张，避免重复/超大图无谓占空间与拖慢转存
     images = images.slice(0, 10);
     detail = detail.slice(0, 15);
@@ -144,10 +155,15 @@
       const folder = slug + '_' + ts;
       const extOf = (u) => { const m = u.match(/\.(jpg|jpeg|png|webp|gif)(?:[?#]|$)/i); return m ? m[1].toLowerCase().replace('jpeg', 'jpg') : 'jpg'; };
       const downloadOne = (url, file) => new Promise(res => {
-        chrome.downloads.download({ url: url, filename: file, conflictAction: 'overwrite', saveAs: false }, () => {
-          const le = chrome.runtime.lastError;
-          res(le ? { ok: false, err: le.message } : { ok: true });
-        });
+        let settled = false;
+        const done = (r) => { if (!settled) { settled = true; res(r); } };
+        setTimeout(() => done({ ok: false, err: 'timeout：Chrome 3 秒内没有响应下载请求' }), 3000);
+        try {
+          chrome.downloads.download({ url: url, filename: file, conflictAction: 'overwrite', saveAs: false }, () => {
+            const le = chrome.runtime.lastError;
+            done(le ? { ok: false, err: le.message } : { ok: true });
+          });
+        } catch (e) { done({ ok: false, err: String(e && e.message || e) }); }
       });
 
       // 先存草稿（不等图片），点一下立即完成
