@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "USLATIAO 1688 采集",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "在 1688 商品页一键采集商品（含图片转存），打开 USLATIAO 后台一键导入为草稿",
   "permissions": ["storage", "unlimitedStorage", "activeTab", "downloads"],
   "host_permissions": [
