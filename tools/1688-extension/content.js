@@ -30,9 +30,31 @@
       .filter(u => /^https?:\/\//.test(u));
   }
 
+  // —— 解析 SKU 列表（多规格：每行 名称 ¥价 库存N个）——
+  // 1688 全局数据字段漂移频繁，故以 DOM 文本扫描为主：凡同时含「¥价格」和「库存N」的短文本行即视为一个 SKU。
+  function parseSkusDom() {
+    const out = [];
+    const seen = new Set();
+    const els = $$('li, div, span, p, td, tr');
+    for (const el of els) {
+      if (el.children.length > 4) continue; // 只要叶子附近的行，容器文本太长不认
+      const t = (el.textContent || '').replace(/\s+/g, ' ').trim();
+      if (!t || t.length > 60) continue;
+      // 名称 ¥6.9 [库存 9999个]；容忍中间混杂起批量等噪音
+      const m = t.match(/^(.+?)\s*[¥￥]\s*(\d+(?:\.\d+)?)(?:\s*[-~]\s*[¥￥]?\s*\d+(?:\.\d+)?)?(?:\s*起批)?\s*库存\s*[:：]?\s*(\d+)/);
+      if (!m) continue;
+      const label = m[1].replace(/^[·•◦\s]+/, '').replace(/(颜色|规格|款式)[:：]\s*/, '').trim();
+      if (!label || seen.has(label)) continue;
+      seen.add(label);
+      out.push({ label: label, price: +m[2], stock: +m[3] });
+      if (out.length >= 60) break; // 封顶防异常页面刷爆
+    }
+    return out;
+  }
+
   function parsePage(isTaobao) {
     const g = globalData();
-    let name = '', cnyMin = 0, cnyMax = 0, images = [], detail = [], weightOz = 0;
+    let name = '', cnyMin = 0, cnyMax = 0, images = [], detail = [], weightOz = 0, skus = [];
 
     if (isTaobao) {
       // —— 淘宝 / 天猫 ——
@@ -64,6 +86,15 @@
       detail = pickImages('#description').concat(pickImages('.desc-wrap')).concat(pickImages('#detail-description'));
       const wTxt = (txt('#mod-detail-attributes') || txt('.sku-attr-list') || '').match(/(\d+(?:\.\d+)?)\s*(g|克|kg|千克)/i);
       if (wTxt) { let w = parseFloat(wTxt[1]); if (/kg|千克/i.test(wTxt[2])) w *= 1000; weightOz = round2(w / 28.3495); }
+      skus = parseSkusDom();
+      // SKU 里若有更低价，让价格区间以 SKU 为准（价格区间文本有时只显示起批价）
+      if (skus.length) {
+        const ps = skus.map(s => s.price).filter(x => x > 0);
+        if (ps.length) {
+          cnyMin = Math.min.apply(null, ps.concat(cnyMin ? [cnyMin] : []));
+          cnyMax = Math.max.apply(null, ps.concat(cnyMax ? [cnyMax] : []));
+        }
+      }
     }
 
     // 去重 + 只收阿里系图床（alicdn / taobaocdn / tbcdn）；兼容 // 协议相对的图；排除 SVG 图标与 tps 小尺寸图标
@@ -86,7 +117,7 @@
     // 数量封顶：主图最多 10 张、详情最多 15 张，避免重复/超大图无谓占空间与拖慢转存
     images = images.slice(0, 10);
     detail = detail.slice(0, 15);
-    return { name, cnyMin, cnyMax, images, detail, weightOz, source_url: location.href };
+    return { name, cnyMin, cnyMax, images, detail, weightOz, skus, source_url: location.href };
   }
 
   // —— 浮动采集条 + 面板 ——
@@ -124,6 +155,8 @@
       <textarea id="usl-imgs" style="width:100%;height:70px;box-sizing:border-box;padding:7px 9px;border:1px solid #d3d1c7;border-radius:8px;font-size:11px;margin:4px 0 10px">${parsed.images.join('\n')}</textarea>
       <label style="font-size:12px;font-weight:500">详情图链接（每行一个）</label>
       <textarea id="usl-detail" style="width:100%;height:60px;box-sizing:border-box;padding:7px 9px;border:1px solid #d3d1c7;border-radius:8px;font-size:11px;margin:4px 0 10px">${parsed.detail.join('\n')}</textarea>
+      <label style="font-size:12px;font-weight:500">SKU 规格（每行：名称|价格|库存，不要的行直接删）</label>
+      <textarea id="usl-skus" style="width:100%;height:80px;box-sizing:border-box;padding:7px 9px;border:1px solid #d3d1c7;border-radius:8px;font-size:11px;margin:4px 0 10px">${parsed.skus.map(s => s.label + '|' + s.price + '|' + s.stock).join('\n')}</textarea>
       <div style="font-size:11px;color:#888780;margin-bottom:10px">来源：${parsed.source_url}</div>
       <div style="display:flex;gap:8px">
         <button id="usl-send" style="flex:1;padding:9px;border:0;border-radius:8px;background:#0f6e56;color:#fff;cursor:pointer">保存商品并下载图片</button>
@@ -146,6 +179,21 @@
       const category = $('#usl-cat').value.trim() || 'spicy-strips';
       const imageUrls = $('#usl-imgs').value.split('\n').map(s => s.trim()).filter(Boolean);
       const detailUrls = $('#usl-detail').value.split('\n').map(s => s.trim()).filter(Boolean);
+      // SKU：每行「名称|价格|库存」，形状对齐后台 variants（option_label/price/stock）
+      const variants = $('#usl-skus').value.split('\n').map(l => l.trim()).filter(Boolean).map(l => {
+        const parts = l.split('|');
+        const label = (parts[0] || '').trim();
+        if (!label) return null;
+        return {
+          sku: (parts[3] || '').trim(),
+          option_label: label,
+          price: round2(parts[1]) || 0,
+          compare_at: null,
+          weight_oz: 0,
+          stock: Math.max(0, parseInt(parts[2], 10) || 0),
+          image: ''
+        };
+      }).filter(Boolean);
       if (!name || !price) { msg().textContent = '名称和售价必填'; msg().style.color = '#d9442b'; return; }
       const btn = $('#usl-send');
       btn.disabled = true; btn.textContent = '保存中…';
@@ -178,6 +226,8 @@
         product: {
           name: name, price: price, compare_at: compare,
           weight_oz: weightOz, category: category, status: 'draft',
+          option_name: variants.length ? 'Style' : '',
+          variants: variants,
           image: '', images: [], detail_images: []
         },
         meta: { folder: folder, main_count: imageUrls.length, detail_count: detailUrls.length }

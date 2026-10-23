@@ -75,6 +75,8 @@ function uslImportMain(drafts) {
           images: [],
           detail_images: [],
           sku: (p.sku || slug).toUpperCase().slice(0, 24),
+          option_name: p.option_name || '',
+          variants: Array.isArray(p.variants) ? p.variants : [],
           status: 'draft'
         };
         console.log('[USLATIAO] 导入中 (' + (done + 1) + '/' + list.length + ')：' + row.name);
