@@ -1,7 +1,10 @@
 // USLATIAO 1688 采集扩展 · content script
-// 在 detail.1688.com/offer/*.html 注入浮动按钮与采集面板：
-//   解析（全局变量优先 → DOM 兜底）→ 弹窗可改（名称/售价/重量/分类/图片）→ 推送后台草稿
+// 注入 1688 全域（国内站 detail.1688.com / 国际站 www.1688.com 等），
+// 仅在商品详情页（URL 含 /offer/）显示浮动按钮与采集面板：
+//   解析（全局变量优先 → DOM 兜底）→ 弹窗可改（名称/售价/重量/分类/图片）→ 图片转存 → 存浏览器草稿
 (function () {
+  // 只在商品详情页注入；列表页/首页不干扰
+  if (!/\/offer\//.test(location.href)) return;
   if (document.getElementById('usl-capture-bar')) return; // 避免重复注入
 
   const $ = (s, r) => (r || document).querySelector(s);

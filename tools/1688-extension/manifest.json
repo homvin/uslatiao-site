@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "USLATIAO 1688 采集",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "在 1688 商品页一键采集商品（含图片转存），打开 USLATIAO 后台一键导入为草稿",
   "permissions": ["storage", "unlimitedStorage", "activeTab"],
   "host_permissions": [
@@ -21,7 +21,7 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://detail.1688.com/offer/*.html"],
+      "matches": ["https://*.1688.com/*", "https://1688.com/*"],
       "js": ["content.js"],
       "run_at": "document_idle"
     },
